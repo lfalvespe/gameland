@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "score": { "type": "number" },
+        "theme": { "type": "string", "enum": ["classic", "cyberpunk", "forest"] },
+        "online": { "type": "boolean" },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Connection between two users",
+      "type": "object",
+      "properties": {
+        "users": { "type": "array", "items": { "type": "string" } },
+        "senderId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "GameMatch": {
+      "title": "GameMatch",
+      "description": "History of a game match",
+      "type": "object",
+      "properties": {
+        "players": { "type": "array", "items": { "type": "string" } },
+        "vsCPU": { "type": "boolean" },
+        "gameType": { "type": "string" },
+        "winner": { "type": "string" },
+        "score": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message in global or private chat",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "roomId": { "type": "string" }
+      }
+    },
+    "Room": {
+      "title": "Room",
+      "description": "A chat room for private conversations",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "type": { "type": "string", "enum": ["private", "group"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Friendship requests and connections"
+    },
+    "matches/{matchId}": {
+      "schema": "GameMatch",
+      "description": "Game history"
+    },
+    "messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Global and private chat messages"
+    },
+    "rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Chat rooms"
+    }
+  }
+}

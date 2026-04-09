@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+}
+
+.classic {
+  --primary: 221.2 83.2% 53.3%;
+  --background: 222.2 84% 4.9%;
+}
+
+.cyberpunk {
+  --primary: 47.9 95.8% 53.1%;
+  --background: 0 0% 0%;
+  --foreground: 47.9 95.8% 53.1%;
+}
+
+.forest {
+  --primary: 142.1 76.2% 36.3%;
+  --background: 160 84% 4.9%;
+}
+
+body {
+  @apply antialiased;
+}

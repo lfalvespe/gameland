@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, displayName, email, photoURL, city, state, score, theme, online, lastSeen
+    //
+    // Collection: friendships
+    // Fields: users (array), status, createdAt
+    //
+    // Collection: matches
+    // Fields: players (array), vsCPU, gameType, winner, score, createdAt
+    //
+    // Collection: messages
+    // Fields: senderId, senderName, text, createdAt, roomId
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email']) &&
+             data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.email is string && data.email.size() < 100;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /friendships/{friendshipId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.users;
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.users;
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.users;
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.players;
+    }
+
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+        resource.data.roomId == 'global' || 
+        request.auth.uid in resource.data.participants
+      );
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid && (
+          request.resource.data.roomId == 'global' ||
+          request.auth.uid in request.resource.data.participants
+        );
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+    }
+  }
+}
