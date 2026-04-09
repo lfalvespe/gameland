@@ -796,7 +796,7 @@ const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, friendI
   };
 
   return (
-    <div className="flex flex-col items-center gap-8 py-12">
+    <div className="flex flex-col items-center gap-8 pt-32 pb-12">
       <div className="text-center">
         <h2 className="text-4xl font-bold mb-2">Tic-Tac-Toe</h2>
         <p className="opacity-60">
