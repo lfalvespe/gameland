@@ -2,68 +2,198 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
-    // Assumed Data Model
+    // Global Safety Net
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Primitive Definitions
+    // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'player') == 'admin') ||
+        (request.auth.token.email == "lfalvespe@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+    function isModerator() {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'player') == 'moderator') || 
+        isAdmin()
+      );
+    }
+    function isBanned() {
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('banned', false) == true;
+    }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
     // ===============================================================
     // Collection: users
-    // Fields: uid, displayName, email, photoURL, city, state, score, theme, online, lastSeen
-    //
-    // Collection: friendships
-    // Fields: users (array), status, createdAt
-    //
-    // Collection: matches
-    // Fields: players (array), vsCPU, gameType, winner, score, createdAt
-    //
-    // Collection: messages
-    // Fields: senderId, senderName, text, createdAt, roomId
     // ===============================================================
-
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'displayName', 'email']) &&
-             data.uid == request.auth.uid &&
-             data.displayName is string && data.displayName.size() < 100 &&
-             data.email is string && data.email.size() < 100;
+             data.uid is string && data.uid.size() <= 128 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 64 &&
+             data.email is string && data.email.size() <= 128;
     }
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && 
+                    (!('role' in incoming()) || incoming().role == 'player') &&
+                    (!('banned' in incoming()) || incoming().banned == false);
+      allow update: if (isOwner(userId) && (
+        // Prevent privilege escalation or self-unbanning
+        incoming().get('role', 'player') == existing().get('role', 'player') &&
+        incoming().get('banned', false) == existing().get('banned', false) &&
+        incoming().uid == existing().uid &&
+        (!('score' in incoming()) || (incoming().score is number && incoming().score >= 0))
+      )) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // ===============================================================
+    // Collection: friendships
+    // ===============================================================
+    function isValidFriendship(data) {
+      return data.keys().hasAll(['users', 'status', 'createdAt']) &&
+             data.users is list && data.users.size() == 2 &&
+             data.users[0] is string && data.users[1] is string &&
+             data.status in ['pending', 'accepted', 'rejected'];
     }
 
     match /friendships/{friendshipId} {
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.users;
-      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.users;
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.users;
-    }
-
-    match /matches/{matchId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.players;
-    }
-
-    match /messages/{messageId} {
-      allow read: if isAuthenticated() && (
-        resource.data.roomId == 'global' || 
-        request.auth.uid in resource.data.participants
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid in friendshipId.split('_') ||
+        (exists(/databases/$(database)/documents/friendships/$(friendshipId)) && request.auth.uid in get(/databases/$(database)/documents/friendships/$(friendshipId)).data.users)
       );
-      allow create: if isAuthenticated() && 
-        request.resource.data.senderId == request.auth.uid && (
-          request.resource.data.roomId == 'global' ||
-          request.auth.uid in request.resource.data.participants
-        );
+      allow create: if isSignedIn() && isValidId(friendshipId) && isValidFriendship(incoming()) && 
+                    request.auth.uid in incoming().users && 
+                    incoming().status == 'pending';
+      allow update: if isSignedIn() && (request.auth.uid in existing().users || isAdmin());
+      allow delete: if isAdmin() || isModerator();
+    }
+
+    // ===============================================================
+    // Collection: matches
+    // ===============================================================
+    match /matches/{matchId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid in incoming().players;
+    }
+
+    // ===============================================================
+    // Collection: rooms
+    // ===============================================================
+    function isValidRoom(data) {
+      return data.keys().hasAll(['name', 'type', 'participants', 'status']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.type in ['open', 'private'] &&
+             data.status in ['waiting', 'playing', 'finished'] &&
+             data.participants is list && data.participants.size() <= 10;
     }
 
     match /rooms/{roomId} {
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
-      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants;
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid in existing().participants || 
+        existing().status == 'waiting' ||
+        existing().type == 'open'
+      );
+      allow create: if isSignedIn() && isValidRoom(incoming()) && request.auth.uid in incoming().participants;
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.uid in existing().participants || 
+        (existing().status == 'waiting' && (existing().type == 'open' || existing().type == 'private')) ||
+        (existing().status == 'finished' && incoming().participants.hasAll([request.auth.uid]))
+      );
+      allow delete: if isAdmin() || (request.auth.uid in existing().participants);
+    }
+
+    // ===============================================================
+    // Collection: hangman_matches
+    // ===============================================================
+    function isValidHangmanMatch(data) {
+      return data.keys().hasAll(['players', 'status', 'playerData', 'scores', 'currentRound']) &&
+             data.players is list && data.players.size() <= 2 &&
+             data.status in ['setup', 'playing', 'round1_result', 'finished'] &&
+             data.currentRound is number &&
+             isValidId(data.players[0]) &&
+             (data.players.size() < 2 || isValidId(data.players[1]));
+    }
+
+    match /hangman_matches/{matchId} {
+      allow read: if isSignedIn() && (
+        resource == null || 
+        request.auth.uid in resource.data.players ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() && 
+                    isValidId(matchId) &&
+                    isValidHangmanMatch(incoming()) &&
+                    request.auth.uid in incoming().players;
+      allow update: if isSignedIn() && (
+        (incoming().diff(existing()).affectedKeys().hasOnly(['players', 'updatedAt']) && 
+         incoming().players.size() == 2 && existing().players.size() == 1 &&
+         incoming().players[1] == request.auth.uid) ||
+        (request.auth.uid in existing().players && (
+          // Action: Setup (Player 1 or 2 ready)
+          (incoming().diff(existing()).affectedKeys().hasOnly(['playerData', 'status', 'currentRound', 'activeGuesser', 'wrongGuesses', 'guesses', 'updatedAt'])) ||
+          // Action: Guess/Play
+          (incoming().diff(existing()).affectedKeys().hasOnly(['guesses', 'wrongGuesses', 'scores', 'status', 'updatedAt', 'activeGuesser', 'currentRound']))
+        )) || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Collection: messages
+    // ===============================================================
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'roomId']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() <= 5000 &&
+             isValidId(data.roomId);
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        existing().roomId == 'global' || 
+        (!isBanned() && (
+          existing().roomId.matches('.*' + request.auth.uid + '.*') || 
+          existing().roomId.matches('room_.*') ||
+          (exists(/databases/$(database)/documents/rooms/$(existing().roomId)) &&
+           request.auth.uid in get(/databases/$(database)/documents/rooms/$(existing().roomId)).data.participants)
+        ))
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.roomId == 'global' ||
+        resource.data.roomId.matches('.*' + request.auth.uid + '.*') ||
+        resource.data.roomId.matches('room_.*')
+      );
+      allow create: if isSignedIn() && !isBanned() && isValidMessage(incoming());
+      allow update: if isSignedIn() && (
+        (incoming().diff(existing()).affectedKeys().hasOnly(['read']) && incoming().read == true) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() || isModerator();
     }
   }
 }

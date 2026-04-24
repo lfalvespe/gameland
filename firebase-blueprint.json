@@ -9,10 +9,47 @@
         "displayName": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "photoURL": { "type": "string" },
+        "bannerURL": { "type": "string" },
+        "status": { "type": "string" },
+        "bio": { "type": "string" },
+        "favoriteGames": { "type": "array", "items": { "type": "string" } },
+        "socialLinks": { 
+          "type": "object",
+          "properties": {
+            "twitter": { "type": "string" },
+            "discord": { "type": "string" },
+            "github": { "type": "string" }
+          }
+        },
+        "achievements": { "type": "array", "items": { "type": "string" } },
+        "badges": { "type": "array", "items": { "type": "string" } },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "ticTacToe": {
+              "type": "object",
+              "properties": {
+                "wins": { "type": "number" },
+                "losses": { "type": "number" },
+                "draws": { "type": "number" }
+              }
+            },
+            "checkers": {
+              "type": "object",
+              "properties": {
+                "wins": { "type": "number" },
+                "losses": { "type": "number" },
+                "draws": { "type": "number" }
+              }
+            }
+          }
+        },
         "city": { "type": "string" },
-        "state": { "type": "string" },
+        "country": { "type": "string" },
         "score": { "type": "number" },
         "theme": { "type": "string", "enum": ["classic", "cyberpunk", "forest"] },
+        "role": { "type": "string", "enum": ["admin", "moderator", "player"] },
+        "banned": { "type": "boolean" },
         "online": { "type": "boolean" },
         "lastSeen": { "type": "string", "format": "date-time" }
       },
@@ -49,18 +86,47 @@
       "properties": {
         "senderId": { "type": "string" },
         "senderName": { "type": "string" },
+        "senderPhotoURL": { "type": "string" },
         "text": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
-        "roomId": { "type": "string" }
+        "roomId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "participants": { "type": "array", "items": { "type": "string" } }
       }
     },
     "Room": {
       "title": "Room",
-      "description": "A chat room for private conversations",
+      "description": "A game or chat room",
       "type": "object",
       "properties": {
+        "name": { "type": "string" },
         "participants": { "type": "array", "items": { "type": "string" } },
-        "type": { "type": "string", "enum": ["private", "group"] },
+        "type": { "type": "string", "enum": ["private", "open"] },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "gameType": { "type": "string" },
+        "accessCode": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "finished"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "lastSenderId": { "type": "string" }
+      }
+    },
+    "HangmanMatch": {
+      "title": "HangmanMatch",
+      "description": "Active hangman game state",
+      "type": "object",
+      "properties": {
+        "players": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["waiting", "setup", "playing", "results", "finished"] },
+        "playerData": { "type": "object" },
+        "currentRound": { "type": "number" },
+        "activeGuesser": { "type": "string" },
+        "guesses": { "type": "array", "items": { "type": "string" } },
+        "wrongGuesses": { "type": "number" },
+        "scores": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     }
@@ -85,6 +151,10 @@
     "rooms/{roomId}": {
       "schema": "Room",
       "description": "Chat rooms"
+    },
+    "hangman_matches/{matchId}": {
+      "schema": "HangmanMatch",
+      "description": "Active hangman game sessions"
     }
   }
 }

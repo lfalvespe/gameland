@@ -1,13 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp, getDocFromServer, getDocs, startAfter } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, deleteUser, reauthenticateWithPopup } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, query, where, or, and, orderBy, limit, onSnapshot, addDoc, serverTimestamp, getDocFromServer, getDocs, startAfter, deleteDoc, arrayUnion, increment, arrayRemove } from 'firebase/firestore';
 
 // Import the Firebase configuration
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
+if (!firebaseConfig || !firebaseConfig.projectId) {
+  throw new Error("Firebase configuration is missing or invalid. Please check firebase-applet-config.json");
+}
+
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -61,6 +65,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   
+  // Gracefully handle common race conditions or listing permission shifts
+  if (errInfo.error.includes("permission-denied") && operationType === OperationType.LIST && (path === 'messages' || path === 'open_rooms')) {
+    console.warn(`Benign permission error during ${path} lookup. Ignoring.`);
+    return;
+  }
+  
   if (onError) {
     let userMessage = "An unexpected database error occurred.";
     if (errInfo.error.includes("permission-denied")) {
@@ -89,6 +99,6 @@ async function testConnection() {
 testConnection();
 
 export { 
-  collection, doc, setDoc, getDoc, updateDoc, query, where, orderBy, limit, onSnapshot, addDoc, serverTimestamp, getDocs, startAfter,
-  signInWithPopup, signOut, onAuthStateChanged
+  collection, doc, setDoc, getDoc, updateDoc, query, where, or, and, orderBy, limit, onSnapshot, addDoc, serverTimestamp, getDocs, startAfter, deleteDoc, arrayUnion, increment, arrayRemove,
+  signInWithPopup, signOut, onAuthStateChanged, deleteUser, reauthenticateWithPopup
 };

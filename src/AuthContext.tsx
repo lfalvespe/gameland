@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, onAuthStateChanged, db, doc, getDoc, setDoc, OperationType, handleFirestoreError } from './firebase';
+import { auth, onAuthStateChanged, db, doc, getDoc, setDoc, updateDoc, OperationType, handleFirestoreError } from './firebase';
 import { User } from 'firebase/auth';
 
 interface UserProfile {
@@ -7,11 +7,38 @@ interface UserProfile {
   displayName: string;
   email: string;
   photoURL: string;
+  bannerURL?: string;
+  status?: string;
+  bio?: string;
+  interests?: string[];
+  favoriteGames?: string[];
+  socialLinks?: {
+    instagram?: string;
+    discord?: string;
+    github?: string;
+  };
+  achievements?: string[];
+  badges?: string[];
+  stats?: {
+    ticTacToe?: { wins: number; losses: number; draws: number };
+    checkers?: { wins: number; losses: number; draws: number };
+    ludo?: { wins: number; losses: number; draws: number };
+    hangman?: { 
+      wins: number; 
+      losses: number; 
+      draws: number; 
+      total: number;
+      totalMistakes?: number;
+      themesPlayed?: Record<string, number>;
+    };
+  };
   score: number;
   theme: 'classic' | 'cyberpunk' | 'forest';
+  role: 'admin' | 'moderator' | 'player';
+  banned: boolean;
   online: boolean;
   city?: string;
-  state?: string;
+  country?: string;
 }
 
 interface AuthContextType {
@@ -41,7 +68,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
-            setProfile(userDoc.data() as UserProfile);
+            const data = userDoc.data() as UserProfile;
+            // Force admin role for the specific user email and persist it
+            if (user.email === 'lfalvespe@gmail.com' && data.role !== 'admin') {
+              data.role = 'admin';
+              await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
+            }
+            setProfile({ uid: user.uid, ...data });
           } else {
             const newProfile: UserProfile = {
               uid: user.uid,
@@ -50,6 +83,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               photoURL: user.photoURL || '',
               score: 0,
               theme: 'classic',
+              role: user.email === 'lfalvespe@gmail.com' ? 'admin' : 'player',
+              banned: false,
               online: true,
             };
             await setDoc(doc(db, 'users', user.uid), newProfile);
