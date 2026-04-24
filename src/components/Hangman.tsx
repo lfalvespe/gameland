@@ -1195,7 +1195,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pt-24 sm:pt-32 pb-12 p-6 flex flex-col items-center justify-center">
+        <div className="flex-1 overflow-y-auto pt-32 sm:pt-40 pb-12 p-6 flex flex-col items-center">
           {mode === 'online' && matchData && (
             <div className="w-full max-w-4xl flex items-center justify-center gap-4 sm:gap-12 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
               {matchData.players.map((playerId: string) => {
