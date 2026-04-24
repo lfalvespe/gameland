@@ -117,4 +117,4 @@ This project is licensed under the MIT License.
 
 Built with ❤️ by the GameLand Portal Team.
 
-<br><br> Fernando Alves
+<br> Fernando Alves
