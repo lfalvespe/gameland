@@ -393,6 +393,8 @@ export default function GameLand() {
                     await setDoc(doc(db, 'rooms', roomId), {
                       participants: [user.uid, targetUser.uid],
                       type: 'private',
+                      name: `Chat with ${targetUser.displayName}`,
+                      status: 'playing',
                       createdAt: serverTimestamp()
                     });
                   }

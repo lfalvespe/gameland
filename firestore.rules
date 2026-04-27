@@ -41,6 +41,13 @@ service cloud.firestore {
     function existing() { return resource.data; }
 
     // ===============================================================
+    // Collection: test
+    // ===============================================================
+    match /test/connection {
+      allow get: if isSignedIn();
+    }
+
+    // ===============================================================
     // Collection: users
     // ===============================================================
     function isValidUser(data) {
@@ -77,10 +84,14 @@ service cloud.firestore {
     }
 
     match /friendships/{friendshipId} {
-      allow read: if isSignedIn() && (
+      allow get: if isSignedIn() && (
         isAdmin() || 
-        request.auth.uid in friendshipId.split('_') ||
-        (exists(/databases/$(database)/documents/friendships/$(friendshipId)) && request.auth.uid in get(/databases/$(database)/documents/friendships/$(friendshipId)).data.users)
+        request.auth.uid in resource.data.users ||
+        request.auth.uid in friendshipId.split('_')
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid in resource.data.users
       );
       allow create: if isSignedIn() && isValidId(friendshipId) && isValidFriendship(incoming()) && 
                     request.auth.uid in incoming().users && 
@@ -109,20 +120,24 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
-      allow read: if isSignedIn() && (
-        isAdmin() ||
-        request.auth.uid in existing().participants || 
-        existing().status == 'waiting' ||
-        existing().type == 'open'
+      allow get: if isSignedIn() && (
+        isAdmin() || isModerator() ||
+        (resource == null && roomId.matches('.*' + request.auth.uid + '.*')) ||
+        (resource != null && (
+          request.auth.uid in resource.data.participants || 
+          resource.data.status == 'waiting' ||
+          resource.data.type == 'open'
+        ))
       );
+      allow list: if isSignedIn();
       allow create: if isSignedIn() && isValidRoom(incoming()) && request.auth.uid in incoming().participants;
       allow update: if isSignedIn() && (
-        isAdmin() ||
+        isAdmin() || isModerator() ||
         request.auth.uid in existing().participants || 
-        (existing().status == 'waiting' && (existing().type == 'open' || existing().type == 'private')) ||
+        existing().status == 'waiting' ||
         (existing().status == 'finished' && incoming().participants.hasAll([request.auth.uid]))
       );
-      allow delete: if isAdmin() || (request.auth.uid in existing().participants);
+      allow delete: if isAdmin() || isModerator() || (request.auth.uid in existing().participants);
     }
 
     // ===============================================================
@@ -130,35 +145,51 @@ service cloud.firestore {
     // ===============================================================
     function isValidHangmanMatch(data) {
       return data.keys().hasAll(['players', 'status', 'playerData', 'scores', 'currentRound']) &&
-             data.players is list && data.players.size() <= 2 &&
+             data.players is list && data.players.size() <= 4 &&
              data.status in ['setup', 'playing', 'round1_result', 'finished'] &&
              data.currentRound is number &&
-             isValidId(data.players[0]) &&
-             (data.players.size() < 2 || isValidId(data.players[1]));
+             isValidId(data.players[0]);
     }
 
     match /hangman_matches/{matchId} {
       allow read: if isSignedIn() && (
+        isAdmin() || isModerator() ||
         resource == null || 
         request.auth.uid in resource.data.players ||
-        isAdmin()
+        resource.data.status == 'setup'
       );
       allow create: if isSignedIn() && 
                     isValidId(matchId) &&
                     isValidHangmanMatch(incoming()) &&
                     request.auth.uid in incoming().players;
       allow update: if isSignedIn() && (
-        (incoming().diff(existing()).affectedKeys().hasOnly(['players', 'updatedAt']) && 
-         incoming().players.size() == 2 && existing().players.size() == 1 &&
-         incoming().players[1] == request.auth.uid) ||
+        isAdmin() || isModerator() ||
         (request.auth.uid in existing().players && (
-          // Action: Setup (Player 1 or 2 ready)
-          (incoming().diff(existing()).affectedKeys().hasOnly(['playerData', 'status', 'currentRound', 'activeGuesser', 'wrongGuesses', 'guesses', 'updatedAt'])) ||
-          // Action: Guess/Play
-          (incoming().diff(existing()).affectedKeys().hasOnly(['guesses', 'wrongGuesses', 'scores', 'status', 'updatedAt', 'activeGuesser', 'currentRound']))
-        )) || isAdmin()
+          // Action: Setup (Ready/Word) - Host started game or someone changed status
+          (existing().status == 'setup' && 
+           incoming().diff(existing()).affectedKeys().hasOnly(['players', 'playerData', 'status', 'startTime', 'updatedAt'])) ||
+          
+          // Action: Participant Setup (Ready/Word)
+          (incoming().diff(existing()).affectedKeys().hasOnly(['playerData', 'updatedAt'])) ||
+
+          // Action: Start Game (Host Only)
+          (existing().status == 'setup' && 
+           incoming().status == 'playing' && 
+           request.auth.uid == existing().players[0] &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'startTime', 'playerData', 'updatedAt'])) ||
+          
+          // Action: Play/Guess/Finish
+          (existing().status == 'playing' && 
+           incoming().diff(existing()).affectedKeys().hasAny(['playerData', 'status', 'winner', 'finishTime', 'updatedAt']))
+        )) ||
+        // Action: Join during setup
+        (existing().status == 'setup' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['players', 'updatedAt']) && 
+         incoming().players.size() <= 4 &&
+         incoming().players.hasAll(existing().players) &&
+         request.auth.uid in incoming().players)
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isModerator();
     }
 
     // ===============================================================

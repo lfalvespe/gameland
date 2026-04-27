@@ -682,6 +682,8 @@ export const Ludo = ({
       }));
       setPlayers(initialPlayers);
       setBoard(createLudoInitialPieces(colors));
+      setFinishedOrder([]);
+      setWinner(null);
       setPlayerColor('red');
       setStatus('playing');
     }
@@ -1903,28 +1905,30 @@ export const Ludo = ({
                       height: '20%'
                     }}
                   >
-                     {/* Celebratory Sparkles in Center */}
-                     <div className="absolute inset-0 pointer-events-none overflow-visible">
-                        {[1, 2, 3].map((i) => (
-                           <motion.div
-                             key={i}
-                             className="absolute"
-                             style={{ left: '50%', top: '50%' }}
-                             animate={{
-                                scale: [0, 1.2, 0],
-                                rotate: [0, 180, 360],
-                                opacity: [0, 0.6, 0]
-                             }}
-                             transition={{
-                                duration: 3 + i,
-                                repeat: Infinity,
-                                delay: i * 0.5
-                             }}
-                           >
-                              <Sparkles className="w-8 h-8 text-yellow-400 -translate-x-1/2 -translate-y-1/2" />
-                           </motion.div>
-                        ))}
-                     </div>
+                     {/* Celebratory Sparkles in Center - Only show when someone has finished or game is over */}
+                     {finishedOrder.length > 0 && (
+                       <div className="absolute inset-0 pointer-events-none overflow-visible">
+                          {[1, 2, 3].map((i) => (
+                             <motion.div
+                               key={i}
+                               className="absolute"
+                               style={{ left: '50%', top: '50%' }}
+                               animate={{
+                                  scale: [0, 1.2, 0],
+                                  rotate: [0, 180, 360],
+                                  opacity: [0, 0.6, 0]
+                               }}
+                               transition={{
+                                  duration: 3 + i,
+                                  repeat: Infinity,
+                                  delay: i * 0.5
+                               }}
+                             >
+                                <Sparkles className="w-8 h-8 text-yellow-400 -translate-x-1/2 -translate-y-1/2" />
+                             </motion.div>
+                          ))}
+                       </div>
+                     )}
 
                      <svg viewBox="0 0 100 100" className="w-full h-full block overflow-visible z-10">
                         <defs>

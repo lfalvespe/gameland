@@ -16,7 +16,7 @@ const GAME_MAX_PLAYERS: Record<string, number> = {
   'Tic-Tac-Toe': 2,
   'Checkers': 2,
   'Ludo': 4,
-  'Forca': 2
+  'Forca': 4
 };
 
 const GameCard = ({ title, description, icon: Icon, iconColor, bgColor, onClick, onInfo, comingSoon }: any) => (
@@ -269,10 +269,15 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
       const nextStatus = room.gameType === 'Ludo' ? 'waiting' : (willBeFull ? 'playing' : 'waiting');
 
       if (room.gameType === 'Forca') {
-        await updateDoc(doc(db, 'hangman_matches', room.id), {
-          players: arrayUnion(user.uid),
-          updatedAt: serverTimestamp()
-        });
+        try {
+          await updateDoc(doc(db, 'hangman_matches', room.id), {
+            players: arrayUnion(user.uid),
+            updatedAt: serverTimestamp()
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `hangman_matches/${room.id}`, showError);
+          return;
+        }
       }
 
       await updateDoc(doc(db, 'rooms', room.id), {
@@ -321,10 +326,15 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         const nextStatus = joiningRoom.gameType === 'Ludo' ? 'waiting' : (willBeFull ? 'playing' : 'waiting');
 
         if (joiningRoom.gameType === 'Forca') {
-          await updateDoc(doc(db, 'hangman_matches', joiningRoom.id), {
-            players: arrayUnion(user.uid),
-            updatedAt: serverTimestamp()
-          });
+          try {
+            await updateDoc(doc(db, 'hangman_matches', joiningRoom.id), {
+              players: arrayUnion(user.uid),
+              updatedAt: serverTimestamp()
+            });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, `hangman_matches/${joiningRoom.id}`, showError);
+            return;
+          }
         }
 
         await updateDoc(doc(db, 'rooms', joiningRoom.id), {
@@ -607,6 +617,8 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         await setDoc(doc(db, 'rooms', roomId), {
           participants: [user.uid, friend.uid],
           type: 'private',
+          name: `Chat with ${friend.displayName}`,
+          status: 'playing',
           createdAt: serverTimestamp()
         });
       }

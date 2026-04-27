@@ -73,9 +73,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   
   if (onError) {
     let userMessage = "An unexpected database error occurred.";
-    if (errInfo.error.includes("permission-denied")) {
+    const isPermissionDenied = errInfo.error.toLowerCase().includes("permission-denied") || 
+                               errInfo.error.toLowerCase().includes("insufficient permissions");
+    
+    if (isPermissionDenied) {
       userMessage = "You don't have permission to perform this action.";
-    } else if (errInfo.error.includes("quota-exceeded")) {
+    } else if (errInfo.error.toLowerCase().includes("quota-exceeded")) {
       userMessage = "Database quota exceeded. Please try again later.";
     } else if (errInfo.error.includes("offline")) {
       userMessage = "You appear to be offline. Check your connection.";
