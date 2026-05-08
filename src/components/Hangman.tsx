@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { HelpCircle, RefreshCw, Send, Users, User, Trophy, Layout, ChevronLeft, Lock, Info, Play, CheckCircle2, AlertCircle, X, LogOut, Volume2, VolumeX } from 'lucide-react';
-import { db, setDoc, updateDoc, doc, onSnapshot, serverTimestamp, arrayUnion, increment, getDoc, deleteDoc, arrayRemove, addDoc, collection } from '../firebase';
-import { cn } from '../lib/utils';
+import { db, setDoc, updateDoc, doc, onSnapshot, serverTimestamp, arrayUnion, increment, getDoc, deleteDoc, arrayRemove, addDoc, collection, OperationType, handleFirestoreError } from '../firebase';
+import { cn, shuffleArray } from '../lib/utils';
 import { useAuth } from '../AuthContext';
+import { useError } from '../ErrorContext';
 import { useSoundEffects } from '../lib/useSoundEffects';
 
 // --- Constants ---
@@ -59,7 +60,59 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'SEX EDUCATION', hint: 'Série adolescente sobre descobertas.' },
     { word: 'HOW I MET YOUR MOTHER', hint: 'Ted conta como conheceu a mãe de seus filhos.' },
     { word: 'THE OFFICE', hint: 'Cotidiano de um escritório de papelaria.' },
-    { word: 'THE MANDALORIAN', hint: 'Caçador de recompensas no universo Star Wars.' }
+    { word: 'THE MANDALORIAN', hint: 'Caçador de recompensas no universo Star Wars.' },
+    { word: 'OPPENHEIMER', hint: 'O pai da bomba atômica, filme de 2023.' },
+    { word: 'COMO TREINAR O SEU DRAGÃO', hint: 'Animação sobre Soluço e Banguela.' },
+    { word: 'DIVER TIDAMENTE', hint: 'Emoções dentro da cabeça de uma menina.' },
+    { word: 'SUNDANCE', hint: 'Famoso festival de cinema independente.' },
+    { word: 'MAD MAX', hint: 'Estrada da fúria no deserto pós-apocalíptico.' },
+    { word: 'O SILÊNCIO DOS INOCENTES', hint: 'Hannibal Lecter e Clarice Starling.' },
+    { word: 'AMELIE POULAIN', hint: 'Clássico francês sobre pequenas alegrias.' },
+    { word: 'O PIANISTA', hint: 'Sobrevivência durante a Segunda Guerra Mundial.' },
+    { word: 'DJANGO LIVRE', hint: 'Western moderno de Tarantino.' },
+    { word: 'SENS8', hint: 'Oito pessoas conectadas mentalmente.' },
+    { word: 'THE LAST OF US', hint: 'Série baseada em jogo de sobrevivência.' },
+    { word: 'SUCCESSION', hint: 'Disputa pelo império da família Roy.' },
+    { word: 'THE BEAR', hint: 'Chef de cozinha tenta salvar o restaurante da família.' },
+    { word: 'OPPENHEIMER', hint: 'O pai da bomba atômica, filme de 2023.' },
+    { word: 'BARBIE', hint: 'Boneca famosa descobre o mundo real no filme de 2023.' },
+    { word: 'SPIDERMAN', hint: 'Herói que solta teias e escala prédios.' },
+    { word: 'DUNA', hint: 'Épico de ficção científica em um planeta deserto.' },
+    { word: 'FIGHT CLUB', hint: 'Brad Pitt e Edward Norton em um clube secreto.' },
+    { word: 'SEVEN', hint: 'Sete crimes capitais e um detetive insistente.' },
+    { word: 'TOY STORY', hint: 'Aventura de Woody e Buzz Lightyear.' },
+    { word: 'V DE VINGANÇA', hint: 'Máscara icônica e revolta em Londres.' },
+    { word: 'MAD MEN', hint: 'Série sobre publicitários nos anos 60.' },
+    { word: 'THE WITCHER', hint: 'Geralt de Rívia caçando monstros.' },
+    { word: 'THE MANDALORIAN', hint: 'Protetor do Baby Yoda na galáxia.' },
+    { word: 'COBRA KAI', hint: 'Continuação de Karatê Kid em forma de série.' },
+    { word: 'TED LASSO', hint: 'Treinador de futebol americano em um time inglês.' },
+    { word: 'WANDINHA', hint: 'Filha da Família Addams na escola Nunca Mais.' },
+    { word: 'LUPIN', hint: 'Ladrão de casaca inspirado nos livros clássicos.' },
+    { word: 'ELITE', hint: 'Suspense e drama em um colégio espanhol luxuoso.' },
+    { word: 'SCARFACE', hint: 'Tony Montana e seu império de drogas em Miami.' },
+    { word: 'O ILUMINADO', hint: 'Trabalho demais e pouca diversão deixam Jack louco.' },
+    { word: 'RESERVOIR DOGS', hint: 'Assalto que deu errado, clássico de Tarantino.' },
+    { word: 'KILL BILL', hint: 'A noiva em busca de vingança com uma katana.' },
+    { word: 'SHREK', hint: 'Ogro verde e seu burro falante.' },
+    { word: 'RATATOUILLE', hint: 'Rato que quer ser um grande chef em Paris.' },
+    { word: 'MONSTROS SA', hint: 'Sully e Mike assustando crianças para gerar energia.' },
+    { word: 'O SHOW DE TRUMAN', hint: 'Homem descobre que sua vida é um reality show.' },
+    { word: 'ET O EXTRATERRESTRE', hint: 'Amigo vindo do espaço que quer ligar para casa.' },
+    { word: 'JAWS', hint: 'Pânico na praia causado por um grande tubarão branco.' },
+    { word: 'GHOSTBUSTERS', hint: 'Quem você vai chamar? Os caça-fantasmas.' },
+    { word: 'MOMMY', hint: 'Filme canadense sobre relação conturbada entre mãe e filho.' },
+    { word: 'PARADOX', hint: 'Viagem no tempo e consequências inesperadas.' },
+    { word: 'SQUID GAME', hint: 'Jogos mortais coreanos por dinheiro.' },
+    { word: 'ALICE NO PAIS DAS MARAVILHAS', hint: 'Menina segue um coelho branco e cai em um buraco.' },
+    { word: 'MALEVOLA', hint: 'A história da vilã da Bela Adormecida.' },
+    { word: 'REI LEAO', hint: 'Simba e o ciclo da vida.' },
+    { word: 'MOANA', hint: 'Jovem navegadora polinésia em busca de seu destino.' },
+    { word: 'ENCANTO', hint: 'Família colombiana com dons mágicos.' },
+    { word: 'COCO', hint: 'Viva a vida é uma festa e o dia dos mortos.' },
+    { word: 'HOCUS POCUS', hint: 'Três bruxas irmãs retornam no Halloween.' },
+    { word: 'BEETLEJUICE', hint: 'Diga o nome dele três vezes.' },
+    { word: 'GREMLINS', hint: 'Não os alimente após a meia-noite.' }
   ],
   'Celebridades': [
     { word: 'BEYONCE', hint: 'Cantora de "Single Ladies" e "Halo".' },
@@ -111,7 +164,46 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'MILTON NASCIMENTO', hint: 'Voz da música mineira.' },
     { word: 'ELIS REGINA', hint: 'Uma das maiores vozes do Brasil.' },
     { word: 'ROBERTO CARLOS', hint: 'O Rei da música brasileira.' },
-    { word: 'CHITÃOZINHO E CHORORÓ', hint: 'Dupla sertaneja de Evidências.' }
+    { word: 'CHITÃOZINHO E CHORORÓ', hint: 'Dupla sertaneja de Evidências.' },
+    { word: 'ANGELINA JOLIE', hint: 'Atriz e ativista humanitária.' },
+    { word: 'JOHNNY DEPP', hint: 'Ator famoso por Jack Sparrow.' },
+    { word: 'TOM HARDY', hint: 'Ator de Mad Max e Venom.' },
+    { word: 'RYAN GOSLING', hint: 'Ator de La La Land e Barbie.' },
+    { word: 'MARGOT ROBBIE', hint: 'Atriz que interpreta Arlequina e Barbie.' },
+    { word: 'EMMA STONE', hint: 'Atriz vencedora do Oscar por La La Land.' },
+    { word: 'JENNIFER LAWRENCE', hint: 'Atriz de Jogos Vorazes.' },
+    { word: 'VIOLA DAVIS', hint: 'Atriz renomada de How to Get Away with Murder.' },
+    { word: 'LUDMILLA', hint: 'Cantora brasileira do Numanice.' },
+    { word: 'PABLLO VITTAR', hint: 'Drag queen e cantora pop brasileira.' },
+    { word: 'JORGE E MATEUS', hint: 'Dupla sertaneja de grande sucesso.' },
+    { word: 'MICHAEL PHELPS', hint: 'Nadador recordista de medalhas olímpicas.' },
+    { word: 'USAIN BOLT', hint: 'O homem mais rápido do mundo.' },
+    { word: 'SERENA WILLIAMS', hint: 'Lenda do tênis mundial.' },
+    { word: 'TIGER WOODS', hint: 'Ícone mundial do golfe.' },
+    { word: 'LEBRON JAMES', hint: 'Astro do basquete da NBA.' },
+    { word: 'STEPHEN CURRY', hint: 'Melhor arremessador de três pontos da NBA.' },
+    { word: 'SHOHEI OHTANI', hint: 'Fenômeno japonês do beisebol.' },
+    { word: 'MALALA YOUSAFZAI', hint: 'Ativista paquistanesa e Nobel da Paz.' },
+    { word: 'GRETA THUNBERG', hint: 'Jovem ativista ambiental sueca.' },
+    { word: 'STEPHEN HAWKING', hint: 'Físico famoso por seus estudos sobre buracos negros.' },
+    { word: 'NEIL DEGRASSE TYSON', hint: 'Astrofísico e divulgador científico.' },
+    { word: 'POPE FRANCIS', hint: 'Líder da Igreja Católica.' },
+    { word: 'DALAI LAMA', hint: 'Líder espiritual do budismo tibetano.' },
+    { word: 'MICHELLE OBAMA', hint: 'Ex-primeira-dama dos EUA e autora.' },
+    { word: 'BARACK OBAMA', hint: 'Primeiro presidente negro dos EUA.' },
+    { word: 'NELSON MANDELA', hint: 'Líder sul-africano contra o apartheid.' },
+    { word: 'GANDHI', hint: 'Líder da independência da Índia pela não-violência.' },
+    { word: 'MARTIN LUTHER KING', hint: 'Líder dos direitos civis nos EUA.' },
+    { word: 'PRINCESS DIANA', hint: 'A Princesa do Povo.' },
+    { word: 'SIMONE BILES', hint: 'Ginasta recordista de títulos.' },
+    { word: 'REBECA ANDRADE', hint: 'Grande ginasta brasileira olímpica.' },
+    { word: 'GABRIEL MEDINA', hint: 'Surfista brasileiro campeão mundial.' },
+    { word: 'ITALO FERREIRA', hint: 'Primeiro medalhista de ouro do surfe olímpico.' },
+    { word: 'ALOK', hint: 'DJ brasileiro de fama mundial.' },
+    { word: 'WHINDERSSON NUNES', hint: 'Humorista e youtuber brasileiro.' },
+    { word: 'FELIPE NETO', hint: 'Um dos maiores youtubers do Brasil.' },
+    { word: 'ANA MARIA BRAGA', hint: 'Apresentadora do Mais Você.' },
+    { word: 'LUCIANO HUCK', hint: 'Apresentador do Domingão.' }
   ],
   'Música': [
     { word: 'THE BEATLES', hint: 'Banda britânica de rock formada por John, Paul, George e Ringo.' },
@@ -163,7 +255,148 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'CHORÃO', hint: 'Vocalista do Charlie Brown Jr.' },
     { word: 'ZÉ RAMALHO', hint: 'Músico paraibano de Chão de Giz.' },
     { word: 'ALCEU VALENÇA', hint: 'Músico pernambucano de Anunciação.' },
-    { word: 'LUAN SANTANA', hint: 'Astro do sertanejo universitário.' }
+    { word: 'LUAN SANTANA', hint: 'Astro do sertanejo universitário.' },
+    { word: 'DAVID BOWIE', hint: 'O Camaleão do Rock.' },
+    { word: 'PRINCE', hint: 'Ícone da música pop de Purple Rain.' },
+    { word: 'WHITNEY HOUSTON', hint: 'Uma das vozes mais potentes da música.' },
+    { word: 'ARETHA FRANKLIN', hint: 'A Rainha do Soul.' },
+    { word: 'AMY WINEHOUSE', hint: 'Cantora de jazz e soul de Rehab.' },
+    { word: 'BRITNEY SPEARS', hint: 'A Princesa do Pop.' },
+    { word: 'KATY PERRY', hint: 'Cantora de Firework e Roar.' },
+    { word: 'SIA', hint: 'Cantora australiana conhecida por perucas e Chandelier.' },
+    { word: 'THE WEEKND', hint: 'Cantor canadense de Blinding Lights.' },
+    { word: 'HARRY STYLES', hint: 'Ex-One Direction, cantor de As It Was.' },
+    { word: 'OLIVIA RODRIGO', hint: 'Jovem estrela do pop de Drivers License.' },
+    { word: 'SZA', hint: 'Cantora de R&B contemporâneo.' },
+    { word: 'ARIANA GRANDE', hint: 'Cantora pop de voz poderosa.' },
+    { word: 'POST MALONE', hint: 'Rapper e cantor de Sunflower.' },
+    { word: 'TRAVIS SCOTT', hint: 'Rapper famoso pelo show no Fortnite.' },
+    { word: 'BAD BUNNY', hint: 'Astro do reggaeton de Porto Rico.' },
+    { word: 'J BALVIN', hint: 'Cantor colombiano de reggaeton.' },
+    { word: 'SHAKIRA', hint: 'Cantora colombiana de Hips Don’t Lie.' },
+    { word: 'ROSALIA', hint: 'Cantora espanhola que mistura flamenco e pop.' },
+    { word: 'MANU CHAO', hint: 'Cantor franco-espanhol de Clandestino.' },
+    { word: 'CAZUZA', hint: 'Músico brasileiro, poeta do rock.' },
+    { word: 'RAUL SEIXAS', hint: 'O Maluco Beleza do rock brasileiro.' },
+    { word: 'CHICO BUARQUE', hint: 'Um dos maiores compositores da MPB.' },
+    { word: 'TOM JOBIM', hint: 'Maestro da Bossa Nova e Garota de Ipanema.' },
+    { word: 'JOÃO GILBERTO', hint: 'O pai da batida da Bossa Nova.' },
+    { word: 'MARIA BETHÂNIA', hint: 'A Abelha Rainha da MPB.' },
+    { word: 'GAL COSTA', hint: 'Uma das vozes mais cristalinas do Brasil.' },
+    { word: 'ZECA PAGODINHO', hint: 'Ícone do samba e do pagode brasilero.' },
+    { word: 'ALCIONE', hint: 'A Marrom, grande voz do samba.' },
+    { word: 'BETH CARVALHO', hint: 'A Madrinha do Samba.' },
+    { word: 'CARTOLA', hint: 'Mestre do samba da Mangueira.' },
+    { word: 'ADONIRAN BARBOSA', hint: 'Poeta do samba paulista.' },
+    { word: 'BAD BRAINS', hint: 'Pioneiros do hardcore punk e reggae.' },
+    { word: 'THE CLASH', hint: 'A única banda que importa no punk.' },
+    { word: 'RAMONES', hint: 'Precursores do punk rock nova-iorquino.' },
+    { word: 'SEX PISTOLS', hint: 'Banda punk britânica polêmica.' },
+    { word: 'GREEN DAY', hint: 'Banda de pop punk de American Idiot.' },
+    { word: 'RED HOT CHILI PEPPERS', hint: 'Banda que mistura rock e funk.' },
+    { word: 'FOO FIGHTERS', hint: 'Banda de Dave Grohl após o Nirvana.' }
+  ],
+  'Novelas': [
+    { word: 'O CLONE', hint: 'Novela sobre clonagem e cultura muçulmana.' },
+    { word: 'AVENIDA BRASIL', hint: 'Carminha e Nina em uma busca por vingança.' },
+    { word: 'SENHORA DO DESTINO', hint: 'Maria do Carmo e a vilã Nazaré Tedesco.' },
+    { word: 'LAÇOS DE FAMÍLIA', hint: 'Helena e Camila disputando o amor de Edu.' },
+    { word: 'MULHERES APAIXONADAS', hint: 'Helena e diversas tramas de paixões no Rio.' },
+    { word: 'ESCRAVA ISAURA', hint: 'Clássico sobre o sofrimento de uma escrava branca.' },
+    { word: 'O REI DO GADO', hint: 'Disputa entre os Mezenga e os Berdinazzi.' },
+    { word: 'ROQUE SANTEIRO', hint: 'O herói que não era herói na cidade de Asa Branca.' },
+    { word: 'VALE TUDO', hint: 'Quem matou Odete Roitman?' },
+    { word: 'PANTANAL', hint: 'A história de Juma Marruá que vira onça.' },
+    { word: 'CAMINHO DAS ÍNDIAS', hint: 'Novela que mostrou a cultura indiana no Brasil.' },
+    { word: 'TIETA', hint: 'Mulher volta rica e poderosa para Santana do Agreste.' },
+    { word: 'CHOCOLATE COM PIMENTA', hint: 'Ana Francisca em busca de vingança em Ventura.' },
+    { word: 'AMÉRICA', hint: 'A busca pelo sonho americano atravessando a fronteira.' },
+    { word: 'DA COR DO PÉCADO', hint: 'Preta e Paco em uma história de amor e preconceito.' },
+    { word: 'PARAÍSO TROPICAL', hint: 'As gêmeas Paula e Taís e o vilão Olavo.' },
+    { word: 'A FAVORITA', hint: 'Flora ou Donatela: quem é a vilã?' },
+    { word: 'CORDEL ENCANTADO', hint: 'Um conto de fadas no sertão brasileiro.' },
+    { word: 'CARROSSEL', hint: 'Novela infantil sobre a Professora Helena e seus alunos.' },
+    { word: 'OS DEZ MANDAMENTOS', hint: 'A história bíblica de Moisés líderando o povo.' },
+    { word: 'MALHAÇÃO', hint: 'Série/Novela juvenil que durou décadas na TV.' },
+    { word: 'O OUTRO LADO DO PARAÍSO', hint: 'Clara e seu retorno triunfal: "Vocês não imaginam o prazer que é estar de volta".' },
+    { word: 'A DONA DO PEDAÇO', hint: 'Maria da Paz e seus bolos de sucesso.' },
+    { word: 'AMOR À VIDA', hint: 'Félix e sua icônica jornada de vilão a queridinho.' },
+    { word: 'IMPÉRIO', hint: 'O Comendador José Alfredo e seu império de joias.' },
+    { word: 'FINA ESTAMPA', hint: 'Pereirão e sua rivalidade com Tereza Cristina.' },
+    { word: 'ALMA GÊMEA', hint: 'Rafael e Serena em uma história de reencarnação.' },
+    { word: 'MULHERES DE AREIA', hint: 'As gêmeas Ruth e Raquel no litoral paulista.' },
+    { word: 'VAMP', hint: 'Novela cômica sobre vampiros em Armação dos Anjos.' },
+    { word: 'SARAMANDAIA', hint: 'Cidade onde coisas fantásticas acontecem, como o homem que voa.' },
+    { word: 'FORÇA DE UM DESEJO', hint: 'Novela de época com Ester Delamare e Inácio.' },
+    { word: 'TERRA NOSTRA', hint: 'A imigração italiana no Brasil com Giuliana e Matteo.' },
+    { word: 'RENASCER', hint: 'José Inocêncio e o facão aos pés do Jequitibá.' },
+    { word: 'PEDRA SOBRE PEDRA', hint: 'Rivalidade entre os Pontes e os Batista em Resplendor.' },
+    { word: 'FERA FERIDA', hint: 'Feliciano Júnior volta para Tubiacanga em busca de vingança.' },
+    { word: 'TUDO OU NADA', hint: 'Novela da Manchete sobre o mundo dos diamantes.' },
+    { word: 'A SUCESSORA', hint: 'A jovem Marina se casa e vai morar em uma mansão com o retrato da falecida.' },
+    { word: 'DANCIN DAYS', hint: 'Júlia Matos sai da prisão e tenta recuperar o amor da filha.' },
+    { word: 'ÁGUA VIVA', hint: 'Luta de uma órfã para encontrar seu pai biológico no Rio.' },
+    { word: 'BAILA COMIGO', hint: 'Gêmeos separados que não sabem da existência um do outro.' },
+    { word: 'ELAS POR ELAS', hint: 'Sete amigas se reencontram após 20 anos.' },
+    { word: 'GUERRA DOS SEXOS', hint: 'Disputa pela herança e pela loja Charlies entre Charlô e Otávio.' },
+    { word: 'VEREDA TROPICAL', hint: 'Silvana luta pela guarda do filho contra o avô milionário.' },
+    { word: 'A GATA COMEU', hint: 'Jô Penteado e o professor Fábio em uma ilha deserta.' },
+    { word: 'SELVA DE PEDRA', hint: 'Cristiano Vilas e o dilema entre a ambição e o amor por Simone.' },
+    { word: 'BREGA E CHIQUE', hint: 'Duas mulheres, uma rica e uma pobre, que dividem o mesmo marido sem saber.' },
+    { word: 'MANDALA', hint: 'Adaptação do mito de Édipo para a realidade brasileira.' },
+    { word: 'VALE TUDO', hint: 'Raquel e a filha Maria de Fátima em um Brasil sem ética.' },
+    { word: 'QUE REI SOU EU', hint: 'Sátira política ambientada no reino imaginário de Avilan.' },
+    { word: 'TOP MODEL', hint: 'A vida dos surfistas e modelos na praia da Macumba.' },
+    { word: 'RAINHA DA SUCATA', hint: 'Maria do Carmo, a nova rica, e a decadente Laurinha Figueroa.' },
+    { word: 'MEU BEM MEU MAL', hint: 'Disputas pelo poder na empresa Venturini Designer.' },
+    { word: 'O DONO DO MUNDO', hint: 'O cirurgião Felipe Barreto e a aposta de seduzir uma virgem.' },
+    { word: 'DE CORPO E ALMA', hint: 'Troca de corações e o submundo dos clubes masculinos.' },
+    { word: 'SONHO MEU', hint: 'A pequena Maria Carolina e sua busca pela mãe.' },
+    { word: 'A VIAGEM', hint: 'Vida após a morte e o espírito obsessivo de Alexandre.' },
+    { word: 'QUATRO POR QUATRO', hint: 'Quatro mulheres se unem para se vingar de seus ex-maridos.' },
+    { word: 'A PRÓXIMA VÍTIMA', hint: 'Mistério sobre uma série de assassinatos baseados no horóscopo chinês.' },
+    { word: 'EXPLODE CORAÇÃO', hint: 'A cultura cigana e o início da internet no Brasil.' },
+    { word: 'XICA DA SILVA', hint: 'A escrava que virou rainha no Tijuco.' },
+    { word: 'ANJO MAU', hint: 'A babá Nice disposta a tudo para subir na vida.' },
+    { word: 'POR AMOR', hint: 'Até onde você iria por amor? Helena troca seu bebê pelo da filha.' },
+    { word: 'TORRE DE BABEL', hint: 'A explosão do shopping Tropical Towers e seus mistérios.' },
+    { word: 'SUAVE VENENO', hint: 'Waldomiro Cerqueira e a misteriosa Inês/Lavínia.' },
+    { word: 'UM ANJO CAIU DO CÉU', hint: 'O anjo Rafael vem à Terra para ajudar o fotógrafo João Medeiros.' },
+    { word: 'O BEIJO DO VAMPIRO', hint: 'Bento luta contra o vampiro Boris pelo amor de Cecília.' },
+    { word: 'CELEBRIDADE', hint: 'A rivalidade entre Maria Clara Diniz e a invejosa Laura.' },
+    { word: 'SENHORA DO DESTINO', hint: 'Maria do Carmo e a busca por sua filha Lindalva.' },
+    { word: 'BELÍSSIMA', hint: 'A vilã Bia Falcão: "Pobreza pega!".' },
+    { word: 'PÁGINAS DA VIDA', hint: 'Nanda morre no parto e a avó rejeita a neta com síndrome de Down.' },
+    { word: 'A FAVORITA', hint: 'Donatela e Flora em uma trama onde o público não sabia quem era a vilã.' },
+    { word: 'CIRANDA DE PEDRA', hint: 'Dramas familiares em uma mansão no Jardim Europa.' },
+    { word: 'PASSIONE', hint: 'Bete Gouveia descobre que seu filho dado como morto está vivo na Itália.' },
+    { word: 'CORDEL ENCANTADO', hint: 'Açucena e Jesuíno em um sertão místico e heróico.' },
+    { word: 'FINA ESTAMPA', hint: 'Griselda, uma mulher que ganha na loteria e enfrenta a arrogância da elite.' },
+    { word: 'CHEIAS DE CHARME', hint: 'As Empreguetes: Penha, Cida e Rosário.' },
+    { word: 'AMOR À VIDA', hint: 'Félix e a vilania cômica que conquistou o Brasil.' },
+    { word: 'VERDADES SECRETAS', hint: 'O submundo da moda e o "book rosa".' },
+    { word: 'ETA MUNDO BOM', hint: 'Candinho e o lema: "Tudo o que acontece de ruim é para melhorar".' },
+    { word: 'A FORÇA DO QUERER', hint: 'Bibi Perigosa e o mundo do tráfico.' },
+    { word: 'ESPELHO DA VIDA', hint: 'Cris Valência e sua jornada no tempo para desvendar um crime.' },
+    { word: 'AMOR DE MÃE', hint: 'Lurdes, Thelma e Vitória em diferentes formas de maternidade.' },
+    { word: 'PANTANAL', hint: 'Remake da história de Jove e Juma no coração do Brasil.' },
+    { word: 'TRAVESSIA', hint: 'Brisa e a lida com as fake news e deepfakes.' },
+    { word: 'TERRA E PAIXÃO', hint: 'Aline luta por suas terras contra a família La Selva.' },
+    { word: 'XANADU', hint: 'Não é bem uma novela, mas vamos focar em: BETO ROCKFELLER.' },
+    { word: 'ESTÚPIDO CUPIDO', hint: 'Saudosismo dos anos sessenta em Albuquerque.' },
+    { word: 'SARAMANDAIA', hint: 'Zico Rosado põe formigas pelo nariz.' },
+    { word: 'A INDOMADA', hint: 'Altiva e a cidade de Greenville.' },
+    { word: 'O CRAVO E A ROSA', hint: 'Catarina e Petruchio em uma adaptação de Shakespeare.' },
+    { word: 'COBRAS E LAGARTOS', hint: 'Foguinho e seu império Luxus.' },
+    { word: 'CUIDADO COM O ANJO', hint: 'Malu e João Miguel, um clássico mexicano exibido no Brasil.' },
+    { word: 'REBELDE', hint: 'Novela juvenil que gerou o fenômeno musical RBD.' },
+    { word: 'RUBI', hint: 'A ambiciosa protagonista que usa sua beleza para subir na vida.' },
+    { word: 'MARIA DO BAIRRO', hint: 'A trilogia das Marias com Thalía.' },
+    { word: 'A USURPADORA', hint: 'Paulina e Paola Bracho vivendo a vida uma da outra.' },
+    { word: 'HISTÓRIA DE AMOR', hint: 'Helena e o pediatra Carlos em um triângulo amoroso.' },
+    { word: 'CARA E COROA', hint: 'Fernanda e Vitória, sósias que trocam de lugar.' },
+    { word: 'QUEM É VOCÊ', hint: 'Mistério sobre a identidade de uma mulher que usa máscaras.' },
+    { word: 'ZAZÁ', hint: 'Zazá Dumont e o sonho de fazer o homem voar novamente.' }
   ],
   'Cidades do mundo': [
     { word: 'PARIS', hint: 'Cidade Luz, capital da França.' },
@@ -215,7 +448,46 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'CURITIBA', hint: 'Cidade modelo em urbanismo no Brasil.' },
     { word: 'MANAUS', hint: 'A metrópole da Amazônia.' },
     { word: 'FORTALEZA', hint: 'Cidade do sol no Ceará.' },
-    { word: 'JERUSALÉM', hint: 'Cidade sagrada para várias religiões.' }
+    { word: 'JERUSALÉM', hint: 'Cidade sagrada para várias religiões.' },
+    { word: 'SÃO PAULO', hint: 'A terra da garoa e maior cidade do Brasil.' },
+    { word: 'BRASÍLIA', hint: 'Capital do Brasil projetada por Niemeyer.' },
+    { word: 'BELO HORIZONTE', hint: 'Capital mineira, cidade dos botecos.' },
+    { word: 'PORTO ALEGRE', hint: 'Capital gaúcha, terra do chimarrão.' },
+    { word: 'FLORIANÓPOLIS', hint: 'A Ilha da Magia em Santa Catarina.' },
+    { word: 'BELÉM', hint: 'Cidade das mangueiras no Pará.' },
+    { word: 'NATAL', hint: 'Cidade do sol e das dunas no Rio Grande do Norte.' },
+    { word: 'MACEIÓ', hint: 'Paraíso das águas em Alagoas.' },
+    { word: 'JOÃO PESSOA', hint: 'Onde o sol nasce primeiro no Brasil.' },
+    { word: 'VICTORIA', hint: 'Capital de Seychelles ou cidade no Canadá.' },
+    { word: 'VANCOUVER', hint: 'Cidade canadense entre o mar e as montanhas.' },
+    { word: 'SAN ANTTONIO', hint: 'Cidade texana do Alamo.' },
+    { word: 'HOUSTON', hint: 'Cidade do centro espacial da NASA.' },
+    { word: 'NEW ORLEANS', hint: 'Berço do jazz na Louisiana.' },
+    { word: 'LAS VEGAS', hint: 'A capital mundial do entretenimento e cassinos.' },
+    { word: 'SEATTLE', hint: 'Cidade do grunge e da Space Needle.' },
+    { word: 'PORTLAND', hint: 'Cidade "esquisita" e verde no Oregon.' },
+    { word: 'DENVER', hint: 'A cidade de uma milha de altura no Colorado.' },
+    { word: 'MEXICO CITY', hint: 'Grande metrópole construída sobre ruínas astecas.' },
+    { word: 'CANCUN', hint: 'Destino turístico famoso no Caribe mexicano.' },
+    { word: 'HAVANA', hint: 'Capital de Cuba, famosa pelos carros antigos.' },
+    { word: 'LIMA', hint: 'Capital gastronômica do Peru.' },
+    { word: 'CUSCO', hint: 'Antiga capital do império Inca.' },
+    { word: 'BOGOTÁ', hint: 'Capital colombiana nas alturas dos Andes.' },
+    { word: 'MEDELLIN', hint: 'Cidade da eterna primavera na Colômbia.' },
+    { word: 'CARTAGENA', hint: 'Cidade amuralhada histórica na Colômbia.' },
+    { word: 'MONTEVIDEO', hint: 'Capital tranquila do Uruguai.' },
+    { word: 'ASUNCION', hint: 'Capital do Paraguai.' },
+    { word: 'LA PAZ', hint: 'Capital mais alta do mundo, na Bolívia.' },
+    { word: 'REYKJAVIK', hint: 'Capital da Islândia.' },
+    { word: 'DUBLIN', hint: 'Capital da Irlanda, terra da Guinness.' },
+    { word: 'EDINBURGH', hint: 'Capital da Escócia, com seu castelo icônico.' },
+    { word: 'BRUSSELS', hint: 'Sede da União Europeia na Bélgica.' },
+    { word: 'LUXEMBOURG', hint: 'Pequena e rica capital europeia.' },
+    { word: 'GENEVA', hint: 'Cidade suíça sede de organizações internacionais.' },
+    { word: 'MONACO', hint: 'Principado luxuoso no Mediterrâneo.' },
+    { word: 'NICE', hint: 'Cidade na Riviera Francesa.' },
+    { word: 'MARSEILLE', hint: 'Grande porto histórico no sul da França.' },
+    { word: 'LYON', hint: 'Capital gastronômica da França.' }
   ],
   'Esportes': [
     { word: 'BASQUETE', hint: 'Esporte jogado com uma cesta.' },
@@ -267,7 +539,46 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'SINUCA', hint: 'Jogo de mesa com tacos e bolas coloridas.' },
     { word: 'XADREZ', hint: 'Esporte da mente e estratégia no tabuleiro.' },
     { word: 'DAMAS', hint: 'Jogo de peças em tabuleiro quadriculado.' },
-    { word: 'DOMINÓ', hint: 'Jogo de peças com pontos de zero a seis.' }
+    { word: 'DOMINÓ', hint: 'Jogo de peças com pontos de zero a seis.' },
+    { word: 'FUTSAL', hint: 'Futebol de salão.' },
+    { word: 'FUTEBOL DE AREIA', hint: 'Futebol jogado na praia.' },
+    { word: 'BIRIBOL', hint: 'Vôlei jogado em piscina.' },
+    { word: 'POLO', hint: 'Esporte jogado a cavalo com taco e bola.' },
+    { word: 'CRÍQUETE', hint: 'Esporte popular na Índia e Inglaterra com bastões.' },
+    { word: 'LACROSSE', hint: 'Esporte de equipe jogado com bastões com rede.' },
+    { word: 'DARDOS', hint: 'Lançamento de pequenos projéteis em um alvo circular.' },
+    { word: 'Boliche', hint: 'Derrubar pinos com uma bola pesada.' },
+    { word: 'Pesca esportiva', hint: 'Capturar e soltar peixes por lazer.' },
+    { word: 'Paintball', hint: 'Jogo de estratégia com fardas e bolas de tinta.' },
+    { word: 'Airsoft', hint: 'Simulação militar com armas de pressão.' },
+    { word: 'Karatê de contato', hint: 'Estilo de karatê com golpes reais.' },
+    { word: 'Kung Fu', hint: 'Arte marcial chinesa inspirada em animais.' },
+    { word: 'Muay Thai', hint: 'Boxe tailandês que usa oito armas do corpo.' },
+    { word: 'Jiu Jitsu', hint: 'Arte marcial focada em finalizações no chão.' },
+    { word: 'Sumô', hint: 'Luta tradicional japonesa entre gigantes.' },
+    { word: 'Luta Livre', hint: 'Entretenimento esportivo com coreografias de combate.' },
+    { word: 'Cabo de guerra', hint: 'Duas equipes puxando uma corda.' },
+    { word: 'Queimada', hint: 'Jogo de acertar o oponente com a bola.' },
+    { word: 'Esconde-esconde', hint: 'Brincadeira de procurar quem se ocultou.' },
+    { word: 'Pega-pega', hint: 'Brincadeira de correr atrás dos outros.' },
+    { word: 'Pular corda', hint: 'Exercício de saltar sobre uma corda em movimento.' },
+    { word: 'Amarelinha', hint: 'Brincadeira de saltar em quadrados numerados.' },
+    { word: 'Peteca', hint: 'Esporte brasileiro de bater com a mão em uma bolsa de penas.' },
+    { word: 'Iatismo', hint: 'Corrida de barcos a vela.' },
+    { word: 'Windsurfe', hint: 'Surfe com uma vela acoplada à prancha.' },
+    { word: 'Kitesurfe', hint: 'Surfe puxado por uma pipa gigante.' },
+    { word: 'Wakeboard', hint: 'Esporte de prancha puxado por lancha.' },
+    { word: 'Stand Up Paddle', hint: 'Remar em pé sobre uma prancha larga.' },
+    { word: 'Bodyboard', hint: 'Surfe deitado em uma prancha curta e macia.' },
+    { word: 'Parkour', hint: 'Arte do deslocamento urbano superando obstáculos.' },
+    { word: 'Slackline', hint: 'Equilibrar-se em uma fita de nylon esticada.' },
+    { word: 'Paraquedismo de salto livre', hint: 'Queda livre antes de abrir o paraquedas.' },
+    { word: 'Base Jump', hint: 'Salto de paraquedas de lugares fixos como prédios.' },
+    { word: 'Bungee Jump', hint: 'Saltar de altura preso por um elástico.' },
+    { word: 'Rapel', hint: 'Descida em paredões usando cordas.' },
+    { word: 'Caving', hint: 'Exploração esportiva de cavernas.' },
+    { word: 'Cannyoning', hint: 'Exploração de canais e rios descendo cachoeiras.' },
+    { word: 'Orientação', hint: 'Corrida usando bússola e mapa no mato.' }
   ],
   'Futebol': [
     { word: 'ESCANTEIO', hint: 'Cobrança do canto do campo.' },
@@ -319,7 +630,46 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'TORCIDA', hint: 'Os fãs que apoiam o time.' },
     { word: 'ULTRASS', hint: 'Torcedores fanáticos e organizados.' },
     { word: 'CATEGORIA DE BASE', hint: 'Onde se formam os novos jogadores.' },
-    { word: 'MERCADO DA BOLA', hint: 'Janela de transferências de jogadores.' }
+    { word: 'MERCADO DA BOLA', hint: 'Janela de transferências de jogadores.' },
+    { word: 'CANELADA', hint: 'Falta grosseira atingindo a canela.' },
+    { word: 'CATIMBA', hint: 'Provocação ou cera para irritar o adversário.' },
+    { word: 'CHOQUE-REI', hint: 'Clássico entre São Paulo e Palmeiras.' },
+    { word: 'FLA-FLU', hint: 'Clássico épico entre Flamengo e Fluminense.' },
+    { word: 'GRENAL', hint: 'A maior rivalidade do Rio Grande do Sul.' },
+    { word: 'DERBY PAULISTA', hint: 'Confronto entre Corinthians e Palmeiras.' },
+    { word: 'MAJESTOSO', hint: 'Clássico entre Corinthians e São Paulo.' },
+    { word: 'CLÁSSICO DOS MILHÕES', hint: 'Vasco versus Flamengo.' },
+    { word: 'Vovô', hint: 'O clássico mais antigo do Brasil (Botafogo x Fluminense).' },
+    { word: 'LIXO', hint: 'Termo pejorativo para um jogo muito ruim.' },
+    { word: 'PELEJA', hint: 'Um jogo muito disputado e sofrido.' },
+    { word: 'CHUTEIRA', hint: 'Calçado especial com travas.' },
+    { word: 'TORCIDA ORGANIZADA', hint: 'Fãs que cantam e apoiam em grupo uniforme.' },
+    { word: 'MANDANTE', hint: 'O time que joga em seu próprio estádio.' },
+    { word: 'VISITANTE', hint: 'O time que joga fora de casa.' },
+    { word: 'ZONA DE REBAIXAMENTO', hint: 'As quatro últimas posições da tabela.' },
+    { word: 'G-4', hint: 'Os quatro primeiros colocados de um campeonato.' },
+    { word: 'LANTERNA', hint: 'O último colocado na classificação.' },
+    { word: 'CARRINHO', hint: 'Entrada deslizando sobre o gramado.' },
+    { word: 'ESCUDO', hint: 'O emblema do time no peito da camisa.' },
+    { word: 'HINO', hint: 'Canção oficial do clube.' },
+    { word: 'SÓCIO TORCEDOR', hint: 'Fã que paga mensalidade para ajudar o clube.' },
+    { word: 'CATEGORIA DE BASE', hint: 'Onde os futuros craques são formados.' },
+    { word: 'PENEIRA', hint: 'Teste para selecionar jovens jogadores.' },
+    { word: 'EMPRESÁRIO', hint: 'Quem faz o meio-campo nas negociações de jogadores.' },
+    { word: 'DIRIGENTE', hint: 'Quem comanda o clube administrativamente.' },
+    { word: 'PRESIDENTE', hint: 'Autoridade máxima de um clube.' },
+    { word: 'ESTADUAL', hint: 'Campeonato disputado dentro de um estado.' },
+    { word: 'COPA DO BRASIL', hint: 'Torneio de mata-mata nacional muito lucrativo.' },
+    { word: 'MUNDIAL DE CLUBES', hint: 'Disputa entre os campeões de cada continente.' },
+    { word: 'EUROCOPA', hint: 'Campeonato de seleções da Europa.' },
+    { word: 'COPA AMÉRICA', hint: 'Campeonato de seleções da América do Sul.' },
+    { word: 'OLIMPÍADAS', hint: 'Evento multiesportivo que também tem futebol.' },
+    { word: 'SELEÇÃO BRASILEIRA', hint: 'O time que representa o Brasil.' },
+    { word: 'CANARINHO', hint: 'Apelido da seleção devido à cor amarela.' },
+    { word: 'MARACANÃ', hint: 'O templo do futebol mundial no Rio.' },
+    { word: 'WEMBLEY', hint: 'Estádio místico na Inglaterra.' },
+    { word: 'SANTIAGO BERNABEU', hint: 'A casa do Real Madrid.' },
+    { word: 'CAMP NOU', hint: 'O gigante estádio do Barcelona.' }
   ],
   'Geografia/História': [
     { word: 'AMAZÔNIA', hint: 'Maior floresta tropical do mundo.' },
@@ -371,7 +721,46 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'TSUNAMI', hint: 'Onda gigante causada por abalo sísmico.' },
     { word: 'OCEANOGRAFIA', hint: 'Estudo dos mares e oceanos.' },
     { word: 'METEOROLOGIA', hint: 'Estudo do clima e tempo.' },
-    { word: 'PALEONTOLOGIA', hint: 'Estudo de fósseis antigos.' }
+    { word: 'PALEONTOLOGIA', hint: 'Estudo de fósseis antigos.' },
+    { word: 'ARQUEOLOGIA', hint: 'Estudo de sociedades antigas através de vestígios.' },
+    { word: 'ANTROPOLOGIA', hint: 'Estudo do ser humano e suas culturas.' },
+    { word: 'SOCIOLOGIA', hint: 'Estudo das sociedades e relações humanas.' },
+    { word: 'MONTE FUJI', hint: 'Montanha sagrada no Japão.' },
+    { word: 'ESTÁTUA DA LIBERDADE', hint: 'Monumento icônico em Nova York.' },
+    { word: 'TORRE EIFFEL', hint: 'Símbolo de Paris e da França.' },
+    { word: 'BIG BEN', hint: 'O relógio mais famoso de Londres.' },
+    { word: 'COLISEU', hint: 'Anfiteatro romano palco de gladiadores.' },
+    { word: 'MACHU PICCHU', hint: 'Cidade perdida dos Incas no Peru.' },
+    { word: 'GRANDE MURALHA', hint: 'Construção milenar visível do espaço na China.' },
+    { word: 'PETRA', hint: 'Cidade esculpida na rocha na Jordânia.' },
+    { word: 'CRISTO REDENTOR', hint: 'Monumento icônico no Rio de Janeiro.' },
+    { word: 'TAJ MAHAL', hint: 'Palácio de mármore branco na Índia.' },
+    { word: 'ACRÓPOLE', hint: 'Parte alta das cidades gregas, onde fica o Partenon.' },
+    { word: 'VATICANO', hint: 'O menor país do mundo, sede da Igreja Católica.' },
+    { word: 'CANAL DO PANAMÁ', hint: 'Obra de engenharia que liga dois oceanos.' },
+    { word: 'ESTREITO DE GIBRALTAR', hint: 'Passagem entre o Mediterrâneo e o Atlântico.' },
+    { word: 'MAR MORTO', hint: 'Lugar mais baixo da terra, onde nada afunda.' },
+    { word: 'MAR VERMELHO', hint: 'Mar entre a África e a Arábia.' },
+    { word: 'RIO VOLGA', hint: 'O rio mais longo da Europa.' },
+    { word: 'RIO MISSISSIPPI', hint: 'Importante rio da América do Norte.' },
+    { word: 'RIO DANÚBIO', hint: 'Rio que corta várias capitais europeias.' },
+    { word: 'LAGO VITÓRIA', hint: 'O maior lago da África.' },
+    { word: 'LAGO TITI CACA', hint: 'Lago navegável mais alto do mundo.' },
+    { word: 'BAIA DE GUANABARA', hint: 'Baía onde fica a cidade do Rio de Janeiro.' },
+    { word: 'ILHA DE PÁSCOA', hint: 'Ilha dos Moais no meio do Pacífico.' },
+    { word: 'GROENLÂNDIA', hint: 'A maior ilha do mundo, coberta de gelo.' },
+    { word: 'ANTÁRTIDA', hint: 'Continente gelado no Polo Sul.' },
+    { word: 'ÁRTICO', hint: 'Região ao redor do Polo Norte.' },
+    { word: 'CÍRCULO POLAR', hint: 'Linha imaginária que delimita as zonas frias.' },
+    { word: 'TRÓPICO DE CÂNCER', hint: 'Linha imaginária no Hemisfério Norte.' },
+    { word: 'TRÓPICO DE CAPRICÓRNIO', hint: 'Linha imaginária no Hemisfério Sul.' },
+    { word: 'LINHA DO EQUADOR', hint: 'Divide a Terra em dois hemisférios.' },
+    { word: 'MERIDIANO DE GREENWICH', hint: 'Marca o fuso horário zero.' },
+    { word: 'PÓLO NORTE', hint: 'O ponto mais ao norte do globo.' },
+    { word: 'PÓLO SUL', hint: 'O ponto mais ao sul do globo.' },
+    { word: 'COORDENADAS', hint: 'Latitude e longitude para localização.' },
+    { word: 'ESTAÇÕES DO ANO', hint: 'Primavera, verão, outono e inverno.' },
+    { word: 'FUSO HORÁRIO', hint: 'Cada uma das divisões de tempo da Terra.' }
   ],
   'Ciência/Natureza': [
     { word: 'FOTOSSÍNTESE', hint: 'Processo pelo qual plantas produzem energia.' },
@@ -423,7 +812,44 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'EMBRIOLOGIA', hint: 'Estudo do desenvolvimento do embrião.' },
     { word: 'BIOQUÍMICA', hint: 'Processos químicos nos seres vivos.' },
     { word: 'FARMACOLOGIA', hint: 'Estudo dos medicamentos e seus efeitos.' },
-    { word: 'VACINA', hint: 'Substância que gera imunidade.' }
+    { word: 'VACINA', hint: 'Substância que gera imunidade.' },
+    { word: 'ANTIBIÓTICO', hint: 'Medicamento contra bactérias.' },
+    { word: 'INFECÇÃO', hint: 'Invasão do corpo por agentes patogênicos.' },
+    { word: 'EPIDEMIA', hint: 'Surto de doença em uma região.' },
+    { word: 'PANDEMIA', hint: 'Surto global de uma doença.' },
+    { word: 'METABOLISMO', hint: 'Conjunto de reações químicas no corpo.' },
+    { word: 'DIGESTÃO', hint: 'Processo de quebra dos alimentos.' },
+    { word: 'RESPIRAÇÃO', hint: 'Troca de gases entre o ser vivo e o ambiente.' },
+    { word: 'CIRCULAÇÃO', hint: 'Transporte de substâncias pelo sangue.' },
+    { word: 'EXCREÇÃO', hint: 'Eliminação de resíduos metabólicos.' },
+    { word: 'SISTEMA NERVOSO', hint: 'Controla as funções do corpo e envia sinais.' },
+    { word: 'SISTEMA IMUNE', hint: 'Defesa do corpo contra invasores.' },
+    { word: 'SISTEMA ÓSSEO', hint: 'Estrutura de suporte do corpo humano.' },
+    { word: 'MÚSCULO', hint: 'Tecido responsável pelos movimentos.' },
+    { word: 'ÓRGÃO', hint: 'Grupo de tecidos que realizam uma função.' },
+    { word: 'TECDO', hint: 'Grupo de células semelhantes.' },
+    { word: 'POLUIÇÃO', hint: 'Degradação do ambiente por substâncias nocivas.' },
+    { word: 'AQUECIMENTO GLOBAL', hint: 'Aumento da temperatura média da Terra.' },
+    { word: 'EFEITO ESTUFA', hint: 'Retenção de calor pela atmosfera.' },
+    { word: 'CAMADA DE OZÔNIO', hint: 'Protege a Terra dos raios UV.' },
+    { word: 'RECICLAGEM', hint: 'Reaproveitamento de materiais descartados.' },
+    { word: 'SUSTENTABILIDADE', hint: 'Uso consciente dos recursos naturais.' },
+    { word: 'ENERGIA RENOVÁVEL', hint: 'Energia de fontes que não se esgotam.' },
+    { word: 'ENERGIA SOLAR', hint: 'Energia obtida a partir da luz do sol.' },
+    { word: 'ENERGIA EÓLICA', hint: 'Energia obtida a partir do vento.' },
+    { word: 'HIDRELÉTRICA', hint: 'Energia obtida da força da água.' },
+    { word: 'MINERAÇÃO', hint: 'Extração de minerais da terra.' },
+    { word: 'PETRÓLEO', hint: 'Combustível fóssil líquido escuro.' },
+    { word: 'CARVÃO MINERAL', hint: 'Combustível fóssil sólido.' },
+    { word: 'GÁS NATURAL', hint: 'Mistura de hidrocarbonetos gasosos.' },
+    { word: 'DESASTRE NATURAL', hint: 'Evento extremo da natureza que causa danos.' },
+    { word: 'FURACÃO', hint: 'Tormenta tropical com ventos circulares fortes.' },
+    { word: 'TORNADO', hint: 'Coluna de ar em rotação violenta.' },
+    { word: 'SECA', hint: 'Período prolongado de falta de chuva.' },
+    { word: 'INUNDAÇÃO', hint: 'Transbordamento de água que cobre a terra.' },
+    { word: 'EROSÃO', hint: 'Desgaste do solo por água ou vento.' },
+    { word: 'FLORESTAMENTO', hint: 'Plantio de árvores em áreas desmatadas.' },
+    { word: 'FÓSSIL', hint: 'Restos ou marcas de seres que viveram no passado.' }
   ],
   'Mundo Animal': [
     { word: 'ELEFANTE', hint: 'O maior animal terrestre.' },
@@ -475,7 +901,45 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'Escorpião', hint: 'Aracnídeo com aguilhão venenoso.' },
     { word: 'Morcego', hint: 'Único mamífero que voa.' },
     { word: 'Esquilo', hint: 'Pequeno roedor que enterra sementes.' },
-    { word: 'Castor', hint: 'Roedor construtor de represas.' }
+    { word: 'Castor', hint: 'Roedor construtor de represas.' },
+    { word: 'PORCO-ESPINHO', hint: 'Mamífero coberto de espinhos defensivos.' },
+    { word: 'ÁGUA-VIVA', hint: 'Animal marinho de corpo mole e tentáculos.' },
+    { word: 'POLVO GIGANTE', hint: 'Grande molusco marinho com muita inteligência.' },
+    { word: 'ARARA AZUL', hint: 'Ave brasileira em perigo de extinção.' },
+    { word: 'TUIUIÚ', hint: 'Ave símbolo do Pantanal.' },
+    { word: 'LOBO GUARÁ', hint: 'Canídeo brasileiro de pernas longas.' },
+    { word: 'ONÇA PINTADA', hint: 'O maior felino das Américas.' },
+    { word: 'MICO LEÃO DOURADO', hint: 'Pequeno primata brasileiro de cor vibrante.' },
+    { word: 'PEIXE-BOI', hint: 'Grande mamífero aquático dócil.' },
+    { word: 'BOTO COR-DE-ROSA', hint: 'Golfinho de água doce da Amazônia.' },
+    { word: 'TAMANDUÁ-BANDEIRA', hint: 'Animal de focinho longo e cauda pilosa.' },
+    { word: 'EMA', hint: 'A maior ave brasileira, não voa.' },
+    { word: 'CONDOR', hint: 'Grande ave de rapina dos Andes.' },
+    { word: 'ALBATROZ', hint: 'Ave marinha de grande envergadura.' },
+    { word: 'PELICANO', hint: 'Ave com grande bolsa no bico para pescar.' },
+    { word: 'CISNE', hint: 'Ave aquática elegante de pescoço longo.' },
+    { word: 'FLAMINGO', hint: 'Ave rosa que vive em lagunas.' },
+    { word: 'AVESTRUZ', hint: 'A maior ave do mundo, corre muito.' },
+    { word: 'GIRAFA', hint: 'O animal mais alto do mundo.' },
+    { word: 'ZEBRA', hint: 'Mamífero africano com listras pretas e brancas.' },
+    { word: 'RINOCERONTE', hint: 'Grande mamífero com chifre no focinho.' },
+    { word: 'BÚFALO', hint: 'Grande bovídeo selvagem.' },
+    { word: 'HIENA', hint: 'Mamífero carnívoro conhecido pelo seu "riso".' },
+    { word: 'CHACAL', hint: 'Canídeo selvagem da África e Ásia.' },
+    { word: 'COIOTE', hint: 'Canídeo selvagem da América do Norte.' },
+    { word: 'LOBO', hint: 'Canídeo social que vive em alcateias.' },
+    { word: 'RAPOSA', hint: 'Canídeo pequeno conhecido pela esperteza.' },
+    { word: 'GUAXINIM', hint: 'Mamífero com "máscara" nos olhos.' },
+    { word: 'TEXUGO', hint: 'Mamífero escavador de garras fortes.' },
+    { word: 'LONTRA', hint: 'Mamífero aquático brincalhão de pele fofa.' },
+    { word: 'ESQUILO-VOADOR', hint: 'Roedor que plana entre árvores.' },
+    { word: 'MORCEGO-VAMPIRO', hint: 'Morcego que se alimenta de sangue.' },
+    { word: 'KIWI', hint: 'Ave da Nova Zelândia que não voa.' },
+    { word: 'DIABO-DA-TASMÂNIA', hint: 'Marsupial carnívoro de grito assustador.' },
+    { word: 'WOMBAT', hint: 'Marsupial australiano atarracado.' },
+    { word: 'WALLABY', hint: 'Pequeno primo do canguru.' },
+    { word: 'ALPACA', hint: 'Mamífero andino de lã macia.' },
+    { word: 'LHAMA', hint: 'Animal de carga dos Andes conhecido por cuspir.' }
   ],
   'Tecnologia': [
     { word: 'ALGORITMO', hint: 'Sequência de instruções para resolver um problema.' },
@@ -527,7 +991,43 @@ const THEME_WORDS: Record<string, { word: string; hint: string }[]> = {
     { word: 'BIG DATA', hint: 'Volume maciço de dados complexos.' },
     { word: 'STREAMING', hint: 'Transmissão contínua de áudio ou vídeo.' },
     { word: 'PODCAST', hint: 'Programa de áudio sob demanda.' },
-    { word: 'E-COMMERCE', hint: 'Comércio eletrônico na internet.' }
+    { word: 'E-COMMERCE', hint: 'Comércio eletrônico na internet.' },
+    { word: 'MARKETPLACE', hint: 'Espaço virtual de compra e venda.' },
+    { word: 'LOGÍSTICA', hint: 'Processo de entrega e armazenamento.' },
+    { word: 'AUTOMAÇÃO', hint: 'Uso de tecnologia para tarefas automáticas.' },
+    { word: 'DOCKER', hint: 'Plataforma para containers de software.' },
+    { word: 'KUBERNETES', hint: 'Orquestrador de containers.' },
+    { word: 'SERVERLESS', hint: 'Foco no código sem gerenciar servidores.' },
+    { word: 'MICROSERVIÇOS', hint: 'Arquitetura de software modular.' },
+    { word: 'DEVOPS', hint: 'Integração entre desenvolvimento e operações.' },
+    { word: 'AGILE', hint: 'Metodologia de desenvolvimento rápido.' },
+    { word: 'SCRUM', hint: 'Framework para gerenciamento de projetos ágeis.' },
+    { word: 'PYTHON', hint: 'Linguagem de programação muito usada em IA.' },
+    { word: 'JAVASCRIPT', hint: 'Linguagem que roda no navegador.' },
+    { word: 'JAVA', hint: 'Linguagem clássica de backend e Android.' },
+    { word: 'KOTLIN', hint: 'Linguagem moderna preferida para Android.' },
+    { word: 'SWIFT', hint: 'Linguagem de programação para iOS.' },
+    { word: 'PHP', hint: 'Linguagem muito usada em sites como WordPress.' },
+    { word: 'GOLANG', hint: 'Linguagem criada pela Google para alta performance.' },
+    { word: 'RUST', hint: 'Linguagem focada em segurança e performance.' },
+    { word: 'SQL', hint: 'Linguagem de consulta para bancos de dados.' },
+    { word: 'NOSQL', hint: 'Bancos de dados não relacionais.' },
+    { word: 'MONGODB', hint: 'Banco de dados de documentos popular.' },
+    { word: 'REDIS', hint: 'Armazenamento de dados em memória para cache.' },
+    { word: 'POSTGRESQL', hint: 'Banco de dados relacional robusto open source.' },
+    { word: 'ORACLE', hint: 'Grande empresa de software de banco de dados.' },
+    { word: 'AWS', hint: 'Serviço de nuvem da Amazon.' },
+    { word: 'AZURE', hint: 'Serviço de nuvem da Microsoft.' },
+    { word: 'GOOGLE CLOUD', hint: 'Plataforma de computação em nuvem do Google.' },
+    { word: 'FIREBASE', hint: 'Plataforma móvel e web do Google.' },
+    { word: 'VERCEL', hint: 'Plataforma para hospedar apps frontend.' },
+    { word: 'NETLIFY', hint: 'Serviço de hospedagem e automação para web.' },
+    { word: 'GITLAB', hint: 'Plataforma completa de DevOps e git.' },
+    { word: 'DASHBOARD', hint: 'Painel visual de controle e dados.' },
+    { word: 'VIRTUALIZAÇÃO', hint: 'Criar versões virtuais de recursos de TI.' },
+    { word: 'VPN', hint: 'Rede privada virtual para segurança.' },
+    { word: 'PROXY', hint: 'Intermediário entre o cliente e o servidor.' },
+    { word: 'SSL', hint: 'Certificado de segurança para sites.' }
   ]
 };
 
@@ -535,7 +1035,13 @@ const LOCAL_WORDS = [
   ...Object.values(THEME_WORDS).flat()
 ];
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const KEYBOARD_ROWS = [
+  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+  ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
+];
+
+const ALPHABET = KEYBOARD_ROWS.flat();
 
 const normalizeText = (text: string) => {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
@@ -792,13 +1298,15 @@ const HangmanFigure = ({ mistakes, maxMistakes = 6, profilePic }: { mistakes: nu
 
 interface HangmanProps {
   mode: 'local' | 'online';
+  variant?: 'battle' | 'classic';
   matchId?: string;
   opponentId?: string;
   onClose: () => void;
 }
 
-export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
+export function Hangman({ mode, variant = 'battle', matchId, opponentId, onClose }: HangmanProps) {
   const { user, profile } = useAuth();
+  const { showError } = useError();
   
   // Local State
   const [localGame, setLocalGame] = useState<{
@@ -828,6 +1336,13 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
   });
 
   useEffect(() => {
+    if (mode === 'online' && variant === 'classic' && matchData) {
+      if (matchData.selectedTheme) setSelectedTheme(matchData.selectedTheme);
+      if (matchData.selectedDifficulty) setSelectedDifficulty(matchData.selectedDifficulty);
+    }
+  }, [mode, variant, matchData?.selectedTheme, matchData?.selectedDifficulty]);
+
+  useEffect(() => {
     localStorage.setItem('hangman_difficulty', selectedDifficulty);
   }, [selectedDifficulty]);
   const [playerProfiles, setPlayerProfiles] = useState<Record<string, any>>({});
@@ -855,32 +1370,38 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
     try {
       const players = mode === 'online' ? (matchData?.players || [user.uid, opponentId]) : [user.uid];
       
-      await addDoc(collection(db, 'matches'), {
-        players: players,
-        gameType: 'Hangman',
-        vsCPU: vsCPU,
-        winner: result === 'won' ? user.uid : (result === 'draw' ? 'Draw' : (mode === 'online' ? (opponentId || 'Opponent') : 'CPU')),
-        createdAt: serverTimestamp()
-      });
-
-      const userRef = doc(db, 'users', user.uid);
-      const gameScore = mode === 'local' ? (localGame?.score || 0) : (matchData?.playerData?.[user.uid]?.sessionScore || 0);
-      
-      const themeUpdate: Record<string, any> = {};
-      if (selectedTheme) {
-        const sanitizedTheme = selectedTheme.replace(/[\./\[\]\*~]/g, '_');
-        themeUpdate[`stats.hangman.themesPlayed.${sanitizedTheme}`] = increment(1);
+      // Global Match Record (Only one player saves in online mode to avoid duplicates)
+      if (mode !== 'online' || (matchData?.players?.[0] === user.uid)) {
+        await addDoc(collection(db, 'matches'), {
+          players: players,
+          gameType: 'Hangman',
+          vsCPU: vsCPU,
+          winner: result === 'won' ? user.uid : (result === 'draw' ? 'Draw' : (mode === 'online' ? (opponentId || 'Opponent') : 'CPU')),
+          createdAt: serverTimestamp(),
+          mode: mode === 'online' ? 'online' : 'vs_cpu'
+        });
       }
 
-      await updateDoc(userRef, {
-        score: increment(result === 'won' ? 50 + gameScore : (result === 'draw' ? 20 : 10)),
-        'stats.hangman.wins': increment(result === 'won' ? 1 : 0),
-        'stats.hangman.losses': increment(result === 'lost' ? 1 : 0),
-        'stats.hangman.draws': increment(result === 'draw' ? 1 : 0),
-        'stats.hangman.total': increment(1),
-        'stats.hangman.totalMistakes': increment(finalMistakes),
-        ...themeUpdate
-      });
+      if (mode === 'online') {
+        const userRef = doc(db, 'users', user.uid);
+        const gameScore = matchData?.playerData?.[user.uid]?.sessionScore || 0;
+        
+        const themeUpdate: Record<string, any> = {};
+        if (selectedTheme) {
+          const sanitizedTheme = selectedTheme.replace(/[\./\[\]\*~]/g, '_');
+          themeUpdate[`stats.hangman.themesPlayed.${sanitizedTheme}`] = increment(1);
+        }
+
+        await updateDoc(userRef, {
+          score: increment(result === 'won' ? 50 + gameScore : (result === 'draw' ? 20 : 10)),
+          'stats.hangman.wins': increment(result === 'won' ? 1 : 0),
+          'stats.hangman.losses': increment(result === 'lost' ? 1 : 0),
+          'stats.hangman.draws': increment(result === 'draw' ? 1 : 0),
+          'stats.hangman.total': increment(1),
+          'stats.hangman.totalMistakes': increment(finalMistakes),
+          ...themeUpdate
+        });
+      }
     } catch (e) {
       console.error("Error saving match result:", e);
     }
@@ -941,11 +1462,20 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
   // Online Subscription
   useEffect(() => {
     if (mode === 'online' && matchId) {
+      setLoading(true);
       const unsub = onSnapshot(doc(db, 'hangman_matches', matchId), 
         async (snap) => {
           if (snap.exists()) {
-            const data = snap.data();
+            const data = snap.data() as any;
             setMatchData(data);
+
+            // Auto-join match if not in players list and status is setup
+            if (user && data.status === 'setup' && !data.players.includes(user.uid) && data.players.length < 6) {
+              updateDoc(doc(db, 'hangman_matches', matchId), {
+                players: arrayUnion(user.uid),
+                updatedAt: serverTimestamp()
+              }).catch(err => console.error("Auto-join match failed:", err));
+            }
 
             // Fetch player profiles if they are missing
             if (data.players) {
@@ -984,27 +1514,29 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
 
   useEffect(() => {
     if (mode === 'online' && matchId) {
-      const handleUnload = () => {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
         const isGameOver = (mode === 'online' && matchData?.status === 'finished');
         if (!isGameOver) {
-          handleLeave();
+          e.preventDefault();
+          e.returnValue = ''; // Required for most browsers to show confirmation
+          return '';
         }
       };
 
-      window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('beforeunload', handleBeforeUnload);
       return () => {
-        window.removeEventListener('beforeunload', handleUnload);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
       };
     }
-  }, [mode, matchId, matchData]);
+  }, [mode, matchId, matchData?.status]);
 
   // Handle building missing match document if host
   const initMissingMatch = async () => {
-    if (!user || !matchId || matchData) return;
+    if (!user || !matchId) return;
     setLoading(true);
     try {
       await setDoc(doc(db, 'hangman_matches', matchId), {
-        players: [user.uid], // We'll add others as they join
+        players: arrayUnion(user.uid),
         status: 'setup',
         playerData: {},
         scores: {},
@@ -1013,7 +1545,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (e) {
-      console.error(e);
+      console.error("Failed to init missing match:", e);
     } finally {
       setLoading(false);
     }
@@ -1028,8 +1560,42 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
     }
   };
 
+  const isExiting = useRef(false);
+
+  useEffect(() => {
+    // This is for cleanup ONLY when the user intentionally leaves via handleLeave or the component is truly dying.
+    // Deleting documents on unmount is dangerous in React (strict mode, layout shifts, etc.)
+    return () => {
+      // We only perform background cleanup if isExiting is NOT set, 
+      // because handleLeave already does its own cleanup.
+      // However, to prevent the race condition where host deletes match during re-render:
+      // We will ONLY remove the user from participants, NOT delete the whole doc during background unmount.
+      if (mode === 'online' && matchId && user && !isExiting.current) {
+         const roomRef = doc(db, 'rooms', matchId);
+         getDoc(roomRef).then(snap => {
+           if (snap.exists()) {
+             const data = snap.data();
+             if (data.participants?.includes(user.uid)) {
+                const newParticipants = data.participants.filter((p: string) => p !== user.uid);
+                // IF we are not intentionally exiting, and it's just an unmount/remount, 
+                // we should be very careful about deleting.
+                // In most cases, it's safer to JUST update participants and NOT delete here.
+                if (newParticipants.length > 0) {
+                  updateDoc(roomRef, {
+                    participants: arrayRemove(user.uid),
+                    participantCount: increment(-1)
+                  });
+                }
+             }
+           }
+         }).catch(err => console.error("Safe cleanup effect error:", err));
+      }
+    };
+  }, [mode, matchId, user?.uid]);
+
   const handleLeave = async () => {
     if (mode === 'online' && matchId && user) {
+      isExiting.current = true;
       try {
         const matchRef = doc(db, 'hangman_matches', matchId);
         const matchSnap = await getDoc(matchRef);
@@ -1151,7 +1717,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
       let newScore = Math.max(0, (localGame.score || 0) + scoreChange);
 
       let newStatus: 'playing' | 'won' | 'lost' = 'playing';
-      const allGuessed = localGame.word.split('').every(l => newGuesses.includes(normalizeText(l)) || l === ' ');
+      const allGuessed = localGame.word.split('').every(l => newGuesses.includes(normalizeText(l)) || l === ' ' || l === '-');
       
       if (allGuessed) {
         newStatus = 'won';
@@ -1176,9 +1742,16 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
       if (!pData || pData.status !== 'playing' || matchData.status !== 'playing') return;
       if (pData.guesses?.includes(letter)) return;
 
-      const myIndex = matchData.players.indexOf(user.uid);
-      const targetPlayerId = matchData.players[(myIndex + 1) % matchData.players.length];
-      const targetWord = matchData.playerData[targetPlayerId].word.toUpperCase();
+      let targetWord = '';
+      if (variant === 'classic') {
+        targetWord = (matchData.word || '').toUpperCase();
+      } else {
+        const targetPlayerId = matchData.targetMappings?.[user.uid] || matchData.players[(matchData.players.indexOf(user.uid) + 1) % matchData.players.length];
+        targetWord = (matchData.playerData[targetPlayerId]?.word || '').toUpperCase();
+      }
+      
+      if (!targetWord) return;
+
       const isCorrect = normalizeText(targetWord).includes(letter);
       
       playSound(isCorrect ? 'correct' : 'wrong');
@@ -1189,10 +1762,10 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
       let scoreChange = isCorrect ? 10 : -2;
       let newScore = Math.max(0, (pData.sessionScore || 0) + scoreChange);
 
-      const allGuessed = targetWord.split('').every((l: string) => newGuesses.includes(normalizeText(l)) || l === ' ');
+      const allGuessed = targetWord.split('').every((l: string) => newGuesses.includes(normalizeText(l)) || l === ' ' || l === '-');
       const playerGameOver = allGuessed || newMistakes >= 6;
 
-      const targetLetters = targetWord.split('').filter((l: string) => l !== ' ');
+      const targetLetters = targetWord.split('').filter((l: string) => l !== ' ' && l !== '-');
       const revealedCount = targetLetters.filter((l: string) => newGuesses.includes(normalizeText(l))).length;
 
       const playerUpdate: any = {
@@ -1254,6 +1827,17 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
   };
 
   const submitOnlineSetup = async () => {
+    if (variant === 'classic') {
+      if (!user || !matchId || !matchData) return;
+      const updates: any = {
+        [`playerData.${user.uid}.ready`]: true,
+        [`playerData.${user.uid}.status`]: 'setup',
+        updatedAt: serverTimestamp()
+      };
+      await updateDoc(doc(db, 'hangman_matches', matchId), updates);
+      return;
+    }
+
     if (!mySetup.word || !mySetup.hint || !user || !matchId || !matchData) return;
 
     const updates: any = {
@@ -1278,27 +1862,105 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
     const everyoneReady = matchData.players.every((pid: string) => matchData.playerData?.[pid]?.ready);
     if (!everyoneReady || matchData.players.length < 2) return;
 
-    const updates: any = {
+    // Use the latest players list from the match data to ensure everyone is included in the game start
+    const currentPlayers = matchData.players as string[];
+    
+    let updates: any = {
       status: 'playing',
       startTime: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
-    matchData.players.forEach((pid: string) => {
+    if (variant === 'classic') {
+      // Pick a word for everyone
+      let pool = LOCAL_WORDS;
+      const theme = matchData.selectedTheme;
+      if (theme && THEME_WORDS[theme]) {
+        pool = THEME_WORDS[theme];
+      }
+
+      const diff = matchData.selectedDifficulty || 'Medium';
+      const filteredPool = pool.filter(item => {
+        const len = item.word.replace(/\s/g, '').length;
+        if (diff === 'Easy') return len <= 6;
+        if (diff === 'Medium') return len > 6 && len <= 10;
+        if (diff === 'Hard') return len > 10;
+        return true;
+      });
+
+      const finalPool = filteredPool.length > 0 ? filteredPool : pool;
+      const random = finalPool[Math.floor(Math.random() * finalPool.length)];
+      
+      updates.word = random.word.toUpperCase();
+      updates.hint = random.hint;
+    } else {
+      // Generate random derangement for word distribution
+      const shuffledForAssignment = shuffleArray(currentPlayers);
+      const targetMappings: Record<string, string> = {};
+      for (let i = 0; i < shuffledForAssignment.length; i++) {
+         const guesser = shuffledForAssignment[i];
+         const target = shuffledForAssignment[(i + 1) % shuffledForAssignment.length];
+         targetMappings[guesser] = target;
+      }
+      updates.targetMappings = targetMappings;
+    }
+
+    currentPlayers.forEach((pid: string) => {
       updates[`playerData.${pid}.status`] = 'playing';
       updates[`playerData.${pid}.startTime`] = serverTimestamp();
       updates[`playerData.${pid}.guesses`] = [];
       updates[`playerData.${pid}.wrongGuesses`] = 0;
       updates[`playerData.${pid}.revealedCount`] = 0;
+      updates[`playerData.${pid}.sessionScore`] = 0;
     });
 
-    await updateDoc(doc(db, 'hangman_matches', matchId), updates);
-    await updateDoc(doc(db, 'rooms', matchId), { status: 'playing' });
+    try {
+      await updateDoc(doc(db, 'hangman_matches', matchId), updates);
+      await updateDoc(doc(db, 'rooms', matchId), { status: 'playing' });
+    } catch (error) {
+       handleFirestoreError(error, OperationType.UPDATE, `hangman_matches/${matchId}`, showError);
+    }
   };
+
+  // Auto-sync status if game started but player was somehow left behind in setup
+  useEffect(() => {
+    if (mode === 'online' && matchId && user && matchData?.status === 'playing') {
+      const myData = matchData.playerData?.[user.uid];
+      if (myData && myData.status === 'setup') {
+        const updates: any = {
+          [`playerData.${user.uid}.status`]: 'playing',
+          [`playerData.${user.uid}.startTime`]: serverTimestamp(),
+          [`playerData.${user.uid}.guesses`]: [],
+          [`playerData.${user.uid}.wrongGuesses`]: 0,
+          [`playerData.${user.uid}.revealedCount`]: 0,
+          updatedAt: serverTimestamp()
+        };
+        updateDoc(doc(db, 'hangman_matches', matchId), updates).catch(err => console.error("Self status sync failed:", err));
+      }
+    }
+  }, [matchData?.status, user?.uid, matchId, mode]);
 
   const saveLocalSetup = () => {
     if (!mySetup.word || !mySetup.hint) return;
     setShowSetupModal(false);
+  };
+
+  const selectOnlineClassicTheme = async (theme: string) => {
+    if (mode === 'online' && variant === 'classic' && matchId && user) {
+      const isHost = matchData?.players[0] === user.uid;
+      if (!isHost) return;
+      
+      try {
+        await updateDoc(doc(db, 'hangman_matches', matchId), {
+          selectedTheme: theme,
+          selectedDifficulty: selectedDifficulty,
+          updatedAt: serverTimestamp()
+        });
+        setShowThemeSelector(false);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `hangman_matches/${matchId}`, showError);
+      }
+    }
   };
 
 
@@ -1319,7 +1981,9 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
               </div>
               <div>
                 <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Escolha um Tema</h3>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40 text-white">Modo Local</p>
+                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40 text-white">
+                  {mode === 'local' ? 'Modo Local' : 'Online Host - Escolha o Tema para Todos'}
+                </p>
               </div>
             </div>
 
@@ -1330,7 +1994,15 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                 {(['Easy', 'Medium', 'Hard'] as const).map((diff) => (
                   <button
                     key={diff}
-                    onClick={() => setSelectedDifficulty(diff)}
+                    onClick={async () => {
+                      setSelectedDifficulty(diff);
+                      if (mode === 'online' && variant === 'classic' && matchData?.players[0] === user?.uid) {
+                         await updateDoc(doc(db, 'hangman_matches', matchId!), {
+                           selectedDifficulty: diff,
+                           updatedAt: serverTimestamp()
+                         });
+                      }
+                    }}
                     className={cn(
                       "py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95",
                       selectedDifficulty === diff 
@@ -1348,7 +2020,10 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
               {Object.keys(THEME_WORDS).map((theme) => (
                 <button
                   key={theme}
-                  onClick={() => startNewLocalGame(theme)}
+                  onClick={() => {
+                    if (mode === 'local') startNewLocalGame(theme);
+                    else selectOnlineClassicTheme(theme);
+                  }}
                   className="group relative flex items-center justify-between p-2 sm:p-3 bg-white/5 border border-white/10 rounded-lg sm:rounded-xl text-left transition-all hover:bg-white/10 hover:border-purple-500/50 active:scale-95"
                 >
                   <div className="min-w-0">
@@ -1368,7 +2043,10 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                 </button>
               ))}
               <button
-                onClick={() => startNewLocalGame()}
+                onClick={() => {
+                  if (mode === 'local') startNewLocalGame();
+                  else selectOnlineClassicTheme('Aleatório');
+                }}
                 className="group relative flex items-center justify-between p-2 sm:p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg sm:rounded-xl text-left transition-all hover:bg-blue-500/20 hover:border-blue-500/50 active:scale-95"
               >
                 <div className="min-w-0">
@@ -1389,7 +2067,10 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
             </div>
 
             <button
-              onClick={onClose}
+              onClick={() => {
+                if (mode === 'online') handleLeave();
+                else onClose();
+              }}
               className="w-full mt-8 py-3 bg-white/5 text-white/40 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:text-white transition-colors"
             >
               Cancelar e Sair
@@ -1430,7 +2111,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                   type="text" 
                   value={mySetup.word}
                   onChange={(e) => setMySetup(prev => ({ ...prev, word: e.target.value.toUpperCase().replace(/[^A-ZÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ ]/g, '') }))}
-                  maxLength={40}
+                  maxLength={60}
                   placeholder="EX: O SENHOR DOS ANÉIS"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-black tracking-widest placeholder:text-white/10 focus:outline-none focus:border-blue-500/50"
                 />
@@ -1442,7 +2123,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                   type="text" 
                   value={mySetup.hint}
                   onChange={(e) => setMySetup(prev => ({ ...prev, hint: e.target.value }))}
-                  maxLength={80}
+                  maxLength={120}
                   placeholder="EX: Trilogia épica de fantasia"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-black tracking-wide placeholder:text-white/10 focus:outline-none focus:border-blue-500/50"
                 />
@@ -1480,8 +2161,8 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                 <Info className="w-6 h-6 text-yellow-500" />
               </div>
               <div>
-                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">How to Play</h3>
-                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40 text-white">Hangman Rules</p>
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">Como Jogar</h3>
+                <p className="text-[10px] font-bold tracking-widest uppercase opacity-40 text-white">Regras - Forca Batalha</p>
               </div>
             </div>
 
@@ -1489,16 +2170,16 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
               <div className="flex gap-4">
                 <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 font-mono font-bold text-blue-400">1</div>
                 <div>
-                  <h4 className="font-bold mb-1 text-white">Objective</h4>
-                  <p className="text-sm opacity-60 text-white">Guess the secret word before the hangman figure is fully drawn. You can make up to 6 mistakes.</p>
+                  <h4 className="font-bold mb-1 text-white">Objetivo</h4>
+                  <p className="text-sm opacity-60 text-white">Adivinhe a palavra secreta antes que o boneco da forca seja totalmente desenhado. Você pode cometer até 6 erros.</p>
                 </div>
               </div>
 
               <div className="flex gap-4">
                 <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 font-mono font-bold text-purple-400">2</div>
                 <div>
-                  <h4 className="font-bold mb-1 text-white">The Duel</h4>
-                  <p className="text-sm opacity-60 text-white">In online mode, each player sets a word for the other. Points are awarded based on how many mistakes you avoid.</p>
+                  <h4 className="font-bold mb-1 text-white">O Duelo</h4>
+                  <p className="text-sm opacity-60 text-white">No modo online, cada jogador define uma palavra para o outro. Os pontos são atribuídos com base em quantos erros você evita.</p>
                 </div>
               </div>
             </div>
@@ -1507,7 +2188,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
               onClick={() => setShowRules(false)}
               className="w-full mt-10 py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest hover:bg-opacity-90 transition-all active:scale-95"
             >
-              Got it!
+              Entendi!
             </button>
           </motion.div>
         </div>
@@ -1524,22 +2205,22 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
             <div className="w-20 h-20 bg-rose-500/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
               <LogOut className="w-10 h-10 text-rose-500" />
             </div>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-4 text-white">Exit Game?</h2>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-4 text-white">Sair do Jogo?</h2>
             <p className="text-sm opacity-60 mb-12 leading-relaxed text-white">
-              If you leave now, you will lose your progress in this match. Are you sure you want to quit?
+              Se você sair agora, perderá seu progresso nesta partida. Tem certeza que deseja sair?
             </p>
             <div className="flex flex-col gap-4">
               <button 
                 onClick={handleLeave}
                 className="w-full py-4 bg-rose-600 hover:bg-rose-500 rounded-2xl font-black uppercase tracking-widest text-sm transition-all active:scale-95 text-white"
               >
-                Yes, Exit Game
+                Sim, Sair do Jogo
               </button>
               <button 
                 onClick={() => setShowExitConfirm(false)}
                 className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black uppercase tracking-widest text-sm transition-all active:scale-95 text-white"
               >
-                No, Stay and Play
+                Não, Continuar Jogando
               </button>
             </div>
           </motion.div>
@@ -1548,68 +2229,137 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
     </AnimatePresence>
   );
 
-  const renderWord = (word: string, guesses: string[]) => {
+  const renderWord = (word: string, guesses: string[], isRevealed = false) => {
+    const words = word.split(' ');
+    const maxWordLength = Math.max(...words.map(w => w.length), 0);
+    let globalCharIndex = 0;
+
+    // Dynamic sizing based on the longest word to prevent mobile overflow
+    // Default (up to 8 chars): w-8 h-10, text-2xl (sm: w-10 h-14, text-4xl)
+    let boxSize = "w-8 h-10 sm:w-10 sm:h-14";
+    let fontSize = "text-2xl sm:text-4xl";
+    let gapSize = "gap-2 sm:gap-4";
+    let borderSize = "border-b-4";
+
+    if (maxWordLength > 12) {
+      boxSize = "w-4 h-7 sm:w-8 sm:h-11";
+      fontSize = "text-base sm:text-2xl";
+      gapSize = "gap-1 sm:gap-2";
+      borderSize = "border-b-2";
+    } else if (maxWordLength > 10) {
+      boxSize = "w-5 h-8 sm:w-9 sm:h-12";
+      fontSize = "text-lg sm:text-3xl";
+      gapSize = "gap-1 sm:gap-3";
+      borderSize = "border-b-2 sm:border-b-4";
+    } else if (maxWordLength > 8) {
+      boxSize = "w-6 h-9 sm:w-10 sm:h-14";
+      fontSize = "text-xl sm:text-4xl";
+      gapSize = "gap-1 sm:gap-4";
+      borderSize = "border-b-3 sm:border-b-4";
+    }
+
     return (
-      <div className="flex flex-wrap justify-center gap-2 mb-8">
-        {word.split('').map((letter, i) => (
-          <motion.div 
-            key={i}
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: i * 0.05 }}
-            className={cn(
-              "w-8 h-10 sm:w-10 sm:h-14 flex items-center justify-center border-b-4 text-2xl sm:text-4xl font-black transition-all",
-              letter === ' ' ? "border-transparent" : "border-blue-500/30",
-              guesses.includes(normalizeText(letter)) ? "text-white" : "text-transparent"
-            )}
-          >
-            <AnimatePresence mode="popLayout">
-              {guesses.includes(normalizeText(letter)) || letter === ' ' ? (
-                <motion.span
-                  key="letter"
-                  initial={{ scale: 0, y: 10, opacity: 0 }}
-                  animate={{ scale: 1, y: 0, opacity: 1 }}
-                  transition={{ 
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 15
-                  }}
-                >
-                  {letter}
-                </motion.span>
-              ) : (
-                <span key="empty">{letter}</span>
+      <div className="flex flex-col items-center mb-8 w-full px-2">
+        <div className="flex flex-wrap justify-center gap-x-8 gap-y-6 w-full">
+          {words.map((currentWord, wordIdx) => (
+            <div 
+              key={wordIdx} 
+              className={cn(
+                "flex justify-center", 
+                gapSize,
+                // If it's a single long word, allow it to wrap internally
+                words.length === 1 ? "flex-wrap" : "flex-nowrap"
               )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
+            >
+              {currentWord.split('').map((letter, charIdx) => {
+                const delayIndex = globalCharIndex++;
+                const isHyphen = letter === '-';
+                const isLetterGuessed = guesses.includes(normalizeText(letter));
+                const showChar = isLetterGuessed || (isHyphen && isRevealed);
+
+                return (
+                  <motion.div 
+                    key={charIdx}
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: delayIndex * 0.05 }}
+                    className={cn(
+                      "flex items-center justify-center font-black transition-all",
+                      boxSize,
+                      fontSize,
+                      (isHyphen || letter === ' ') ? "border-none" : borderSize,
+                      "border-blue-500/30",
+                      showChar ? "text-white" : "text-transparent"
+                    )}
+                  >
+                    <AnimatePresence mode="popLayout">
+                      {showChar ? (
+                        <motion.span
+                          key="letter"
+                          initial={{ scale: 0, y: 10, opacity: 0 }}
+                          animate={{ scale: 1, y: 0, opacity: 1 }}
+                          transition={{ 
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 15
+                          }}
+                        >
+                          {letter}
+                        </motion.span>
+                      ) : (
+                        <span key="empty">{letter}</span>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+              {/* Account for space in animation delay if not last word */}
+              {wordIdx < words.length - 1 && (globalCharIndex++ || true) && null}
+            </div>
+          ))}
+        </div>
+        
+        {/* Discreet notice for single long words that might wrap */}
+        {words.length === 1 && word.length > 8 && (
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.4 }}
+            className="text-[10px] uppercase tracking-widest mt-4 text-white font-medium"
+          >
+            Palavra única
+          </motion.p>
+        )}
       </div>
     );
   };
 
   const renderKeyboard = (guesses: string[], correctWord?: string) => {
     return (
-      <div className="grid grid-cols-7 sm:grid-cols-9 gap-1.5 sm:gap-2 max-w-2xl mx-auto">
-        {ALPHABET.map(letter => {
-          const isGuessed = guesses.includes(letter);
-          const isCorrect = correctWord && normalizeText(correctWord).includes(letter);
-          
-          return (
-            <button
-              key={letter}
-              onClick={() => handleGuess(letter)}
-              disabled={isGuessed}
-              className={cn(
-                "h-10 sm:h-12 rounded-lg font-bold text-sm transition-all active:scale-95",
-                !isGuessed && "bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20",
-                isGuessed && isCorrect && "bg-green-500/20 border border-green-500/40 text-green-400 cursor-not-allowed",
-                isGuessed && !isCorrect && "bg-rose-500/20 border border-rose-500/40 text-rose-400 opacity-40 cursor-not-allowed"
-              )}
-            >
-              {letter}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-2 max-w-2xl mx-auto w-full px-2">
+        {KEYBOARD_ROWS.map((row, rowIndex) => (
+          <div key={rowIndex} className="flex gap-1 sm:gap-2 justify-center w-full">
+            {row.map(letter => {
+              const isGuessed = guesses.includes(letter);
+              const isCorrect = correctWord && normalizeText(correctWord).includes(letter);
+              
+              return (
+                <button
+                  key={letter}
+                  onClick={() => handleGuess(letter)}
+                  disabled={isGuessed}
+                  className={cn(
+                    "flex-1 min-w-0 h-10 sm:h-12 max-w-[60px] rounded-lg font-bold text-sm sm:text-base transition-all active:scale-95 flex items-center justify-center",
+                    !isGuessed && "bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20",
+                    isGuessed && isCorrect && "bg-green-500/20 border border-green-500/40 text-green-400 cursor-not-allowed",
+                    isGuessed && !isCorrect && "bg-rose-500/20 border border-rose-500/40 text-rose-400 opacity-40 cursor-not-allowed"
+                  )}
+                >
+                  {letter}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     );
   };
@@ -1625,7 +2375,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
     mainContent = (
       <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center p-6 text-white">
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs font-black uppercase tracking-widest opacity-40">Loading Forca...</p>
+        <p className="text-xs font-black uppercase tracking-widest opacity-40">Loading Forca Batalha...</p>
       </div>
     );
   } else if (mode === 'online' && !matchData) {
@@ -1665,26 +2415,34 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
 
     const players = mode === 'online' ? (matchData?.players || []) : [];
     const myIndex = players.indexOf(user?.uid || '');
-    const targetPlayerId = players.length > 0 ? players[(myIndex + 1) % players.length] : null;
+    const targetPlayerId = mode === 'online' && matchData?.targetMappings 
+      ? matchData.targetMappings[user?.uid || ''] 
+      : (players.length > 0 ? players[(myIndex + 1) % players.length] : null);
     
     // In online mode:
     // - If playing: show target's word (the one we are guessing)
     // - If setup: show my own word (the one I am defining)
     const currentWord = mode === 'local' ? localGame?.word : 
                       (matchData?.status === 'playing') ? 
-                      (targetPlayerId ? (matchData.playerData[targetPlayerId]?.word || '') : '') : 
-                      (hasDefinedWord ? mySetup.word : ' '.repeat(Math.max(5, mySetup.word.length || 8)));
+                      (variant === 'classic' ? (matchData.word || '') : (targetPlayerId ? (matchData.playerData[targetPlayerId]?.word || '') : '')) : 
+                      (variant === 'classic' ? '' : (hasDefinedWord ? mySetup.word : ' '.repeat(Math.max(5, mySetup.word.length || 8))));
     
     const currentHint = mode === 'local' ? localGame?.hint : 
                        (matchData?.status === 'playing') ? 
-                       (targetPlayerId ? (matchData.playerData[targetPlayerId]?.hint || '') : '') : 
-                       (hasDefinedWord ? mySetup.hint : 'Aguardando palavra...');
+                       (variant === 'classic' ? (matchData.hint || '') : (targetPlayerId ? (matchData.playerData[targetPlayerId]?.hint || '') : '')) : 
+                       (variant === 'classic' ? (matchData?.selectedTheme ? `Tema: ${matchData.selectedTheme}` : 'Aguardando tema...') : (hasDefinedWord ? mySetup.hint : 'Aguardando palavra...'));
 
     const mistakesCount = mode === 'local' ? (localGame?.mistakes || 0) : (matchData?.playerData?.[user!.uid]?.wrongGuesses || 0);
     const maxMistakes = mode === 'local' ? (localGame?.difficulty === 'Easy' ? 8 : localGame?.difficulty === 'Hard' ? 6 : 7) : 6;
     const currentGuesses = mode === 'local' ? (localGame?.guesses || []) : 
                            (matchData?.status === 'setup' ? (hasDefinedWord ? ALPHABET : []) : (matchData?.playerData?.[user!.uid]?.guesses || []));
-    const isPlayerPlaying = mode === 'online' ? (matchData?.playerData?.[user!.uid]?.status === 'playing') : (localGame?.status === 'playing');
+    
+    // Safety check: if match is playing but my player status is still setup, treat as playing if it was a minor sync delay
+    const effectivePlayerStatus = mode === 'online' ? 
+      ((matchData?.status === 'playing' && matchData?.playerData?.[user!.uid]?.status === 'setup') ? 'playing' : matchData?.playerData?.[user!.uid]?.status) : 
+      localGame?.status;
+
+    const isPlayerPlaying = effectivePlayerStatus === 'playing';
 
     mainContent = (
       <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col text-white">
@@ -1701,10 +2459,14 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
             </button>
 
             <div className="text-center absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
-              <h1 className="text-xl font-black italic uppercase tracking-tighter text-white">Forca</h1>
+              <h1 className="text-xl font-black italic uppercase tracking-tighter text-white">
+                {variant === 'classic' ? 'Forca Clássico' : 'Forca Batalha'}
+              </h1>
               <div className="flex flex-col sm:flex-row items-center sm:gap-2">
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-40 text-white">{mode === 'local' ? 'Modo Local' : 'Duelo Simultâneo'}</p>
-                {mode === 'local' && (
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-40 text-white">
+                  {mode === 'local' ? 'Modo Local' : variant === 'classic' ? 'Arena Global' : 'Duelo Simultâneo'}
+                </p>
+                {(mode === 'local' || (variant === 'classic' && matchData)) && (
                   <div className="flex gap-1.5 mt-1 sm:mt-0">
                     {selectedTheme && (
                       <span className="text-[8px] font-black bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/30 uppercase tracking-widest shadow-[0_0_10px_rgba(168,85,247,0.2)]">
@@ -1837,8 +2599,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                   if (!playerData) return null;
                   
                   const players = matchData.players;
-                  const pIndex = players.indexOf(pid);
-                  const targetId = players[(pIndex + 1) % players.length];
+                  const targetId = matchData.targetMappings?.[pid] || players[(players.indexOf(pid) + 1) % players.length];
                   const targetData = matchData.playerData[targetId];
                   
                   const pInfo = playerProfiles[pid] || {};
@@ -1892,7 +2653,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                             </div>
                           )}
                           <div className="scale-75 origin-top-left -ml-4 sm:ml-0">
-                            {renderWord(wordToGuess, guesses)}
+                            {renderWord(wordToGuess, guesses, isGameOver || status !== 'playing')}
                           </div>
                         </div>
                       </div>
@@ -1919,61 +2680,131 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
                 
                 {mode === 'online' && matchData?.status === 'setup' ? (
                   <div className="space-y-4">
-                    {!isReady ? (
-                      <>
-                        {!hasDefinedWord ? (
-                          <button 
-                            onClick={() => setShowSetupModal(true)}
-                            className="w-full py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-500 transition-all flex items-center justify-center gap-2 text-white"
-                          >
-                            <Play className="w-3 h-3 fill-current" /> Informar sua palavra
-                          </button>
-                        ) : (
-                          <div className="flex flex-col gap-3">
-                            <div className="text-xs font-bold text-green-400 mb-1">Palavra definida com sucesso!</div>
-                            <div className="flex gap-2">
-                              <button 
-                                onClick={() => setShowSetupModal(true)}
-                                className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all text-white"
-                              >
-                                Editar
-                              </button>
+                    {variant === 'classic' ? (
+                      <div className="flex flex-col gap-4">
+                        {isHost ? (
+                          <>
+                            <button 
+                              onClick={() => setShowThemeSelector(true)}
+                              className="w-full py-4 bg-purple-600 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-purple-500 transition-all flex items-center justify-center gap-2 text-white"
+                            >
+                              <Layout className="w-3 h-3" /> {selectedTheme ? `Tema: ${selectedTheme}` : 'Escolher Tema'}
+                            </button>
+                            {!isReady ? (
                               <button 
                                 onClick={submitOnlineSetup}
-                                className="flex-1 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-green-900/20 text-white"
+                                disabled={!selectedTheme}
+                                className="w-full py-4 bg-green-600 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-green-500 transition-all disabled:opacity-30 text-white shadow-lg shadow-green-900/20"
                               >
-                                Ready
+                                Estou Pronto!
                               </button>
+                            ) : (
+                              <div className="py-4 text-white">
+                                {canStart ? (
+                                  <div className="flex flex-col items-center gap-4 w-full">
+                                    <div className="text-xs font-bold text-green-400 mb-1 animate-bounce">Tudo pronto!</div>
+                                    <button 
+                                      onClick={startOnlineGame}
+                                      className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl shadow-green-900/30 flex items-center justify-center gap-2 text-white"
+                                    >
+                                      <Play className="w-4 h-4 fill-current" /> Iniciar Partida
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center gap-3">
+                                    <RefreshCw className="w-6 h-6 text-blue-400 animate-spin-slow" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                      Aguardando jogadores...
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-4">
+                            {!isReady ? (
+                              <>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-2">
+                                  {matchData.selectedTheme ? `O mestre escolheu: ${matchData.selectedTheme}` : 'O mestre está escolhendo o tema...'}
+                                </p>
+                                <button 
+                                  onClick={submitOnlineSetup}
+                                  className="w-full py-4 bg-green-600 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-green-500 transition-all text-white shadow-lg shadow-green-900/20"
+                                >
+                                  Estou Pronto!
+                                </button>
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center gap-3 py-4">
+                                <RefreshCw className="w-6 h-6 text-blue-400 animate-spin-slow" />
+                                <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                  {everyoneReady ? 'Aguardando o mestre iniciar...' : 'Aguardando outros jogadores...'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {!isReady ? (
+                          <>
+                            {!hasDefinedWord ? (
+                              <button 
+                                onClick={() => setShowSetupModal(true)}
+                                className="w-full py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-blue-500 transition-all flex items-center justify-center gap-2 text-white"
+                              >
+                                <Play className="w-3 h-3 fill-current" /> Informar sua palavra
+                              </button>
+                            ) : (
+                              <div className="flex flex-col gap-3">
+                                <div className="text-xs font-bold text-green-400 mb-1">Palavra definida com sucesso!</div>
+                                <div className="flex gap-2">
+                                  <button 
+                                    onClick={() => setShowSetupModal(true)}
+                                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all text-white"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button 
+                                    onClick={submitOnlineSetup}
+                                    className="flex-1 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all shadow-lg shadow-green-900/20 text-white"
+                                  >
+                                    Estou Pronto!
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="py-4 text-white">
+                            <div className="flex flex-col items-center gap-3">
+                              {canStart ? (
+                                <div className="flex flex-col items-center gap-4 w-full">
+                                  <div className="text-xs font-bold text-green-400 mb-1 animate-bounce">Tudo pronto!</div>
+                                  <button 
+                                    onClick={startOnlineGame}
+                                    className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl shadow-green-900/30 flex items-center justify-center gap-2 text-white"
+                                  >
+                                    <Play className="w-4 h-4 fill-current" /> Iniciar Partida
+                                  </button>
+                                  <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Você é o dono da sala</p>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center gap-3">
+                                  <RefreshCw className="w-6 h-6 text-blue-400 animate-spin-slow" />
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                                    {isHost ? 'Aguardando jogadores ficarem Ready...' : 'Aguardando o dono iniciar...'}
+                                  </p>
+                                  {everyoneReady && !isHost && (
+                                    <p className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Todos prontos!</p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
-                      </>
-                    ) : (
-                      <div className="py-4 text-white">
-                        <div className="flex flex-col items-center gap-3">
-                          {canStart ? (
-                            <div className="flex flex-col items-center gap-4 w-full">
-                              <div className="text-xs font-bold text-green-400 mb-1 animate-bounce">Tudo pronto!</div>
-                              <button 
-                                onClick={startOnlineGame}
-                                className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-2xl font-black uppercase tracking-widest text-[11px] transition-all shadow-xl shadow-green-900/30 flex items-center justify-center gap-2 text-white"
-                              >
-                                <Play className="w-4 h-4 fill-current" /> Iniciar Partida
-                              </button>
-                              <p className="text-[8px] font-black uppercase tracking-widest text-white/30">Você é o dono da sala</p>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center gap-3">
-                              <RefreshCw className="w-6 h-6 text-blue-400 animate-spin-slow" />
-                              <p className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                                {isHost ? 'Aguardando jogadores ficarem Ready...' : 'Aguardando o dono iniciar...'}
-                              </p>
-                              {everyoneReady && !isHost && (
-                                <p className="text-[8px] font-bold text-green-400 uppercase tracking-widest">Todos prontos!</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -2008,7 +2839,7 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
 
             {/* Right Side: Word and Keyboard */}
             <div className="flex flex-col gap-12 w-full">
-              {renderWord(currentWord || '', currentGuesses)}
+              {renderWord(currentWord || '', currentGuesses, playerStatus !== 'playing' || isGameOver)}
 
               <AnimatePresence mode="wait">
                 {isPlayerPlaying ? (
@@ -2151,9 +2982,8 @@ export function Hangman({ mode, matchId, opponentId, onClose }: HangmanProps) {
               const info = playerProfiles[pid] || {};
               const data = matchData.playerData[pid] || {};
               const isPMe = pid === user?.uid;
-              const myIndexInList = players.indexOf(pid);
-              const targetPlayerIdForThis = players[(myIndexInList + 1) % players.length];
-              const targetWord = matchData.playerData[targetPlayerIdForThis]?.word || '-';
+              const targetPlayerIdForThis = matchData.targetMappings?.[pid] || players[(players.indexOf(pid) + 1) % players.length];
+              const targetWord = variant === 'classic' ? (matchData.word || '-') : (matchData.playerData[targetPlayerIdForThis]?.word || '-');
               const stats = {
                 revealed: data.revealedCount || 0,
                 wrong: data.wrongGuesses || 0,

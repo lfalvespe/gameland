@@ -66,6 +66,7 @@ export const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, 
   const [showRules, setShowRules] = useState(false);
   const [winningLine, setWinningLine] = useState<number[] | null>(null);
   const [isForfeit, setIsForfeit] = useState(false);
+  const matchSavedRef = useRef(false);
   const [rematchRequested, setRematchRequested] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
   const [accessCode, setAccessCode] = useState<string | null>(null);
@@ -459,35 +460,42 @@ export const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, 
   }, [board]);
 
   useEffect(() => {
-    if (winner) {
+    if (winner && !matchSavedRef.current) {
       saveMatch(winner, isForfeit);
+    }
+    // Reset ref when game is reset (not handled here but good practice)
+    if (!winner) {
+      matchSavedRef.current = false;
     }
   }, [winner, isForfeit]);
 
   const saveMatch = async (result: string, isForfeit = false) => {
-    if (!user) return;
+    if (!user || matchSavedRef.current) return;
+    matchSavedRef.current = true;
     
     // --- Score Update (Every player updates their own score) ---
     if (isSpectator) return;
     try {
-      let points = 0;
-      if (result === 'Draw') {
-        points = 2;
-      } else if (result === playerSymbol || (!online && result === 'X')) {
-        points = 10;
-      }
-      
-      if (points > 0) {
-        await updateDoc(doc(db, 'users', user.uid), {
-          score: increment(points),
-          [`stats.ticTacToe.wins`]: result === playerSymbol || (!online && result === 'X') ? increment(1) : increment(0),
-          [`stats.ticTacToe.losses`]: (result !== 'Draw' && result !== playerSymbol && (online || result !== 'X')) ? increment(1) : increment(0),
-        });
-      } else if (result !== 'Draw') {
-        // Even if no points (defeat), update losses
-        await updateDoc(doc(db, 'users', user.uid), {
-          [`stats.ticTacToe.losses`]: increment(1)
-        });
+      if (online) {
+        let points = 0;
+        if (result === 'Draw') {
+          points = 2;
+        } else if (result === playerSymbol) {
+          points = 10;
+        }
+        
+        if (points > 0) {
+          await updateDoc(doc(db, 'users', user.uid), {
+            score: increment(points),
+            [`stats.ticTacToe.wins`]: result === playerSymbol ? increment(1) : increment(0),
+            [`stats.ticTacToe.losses`]: (result !== 'Draw' && result !== playerSymbol) ? increment(1) : increment(0),
+          });
+        } else if (result !== 'Draw') {
+          // Even if no points (defeat), update losses
+          await updateDoc(doc(db, 'users', user.uid), {
+            [`stats.ticTacToe.losses`]: increment(1)
+          });
+        }
       }
     } catch (error) {
       console.error("Error updating score:", error);
@@ -528,7 +536,8 @@ export const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, 
             ? (result === playerSymbol ? user.uid : (opponent?.uid || 'Opponent'))
             : (result === 'X' ? 'Player' : 'CPU')
         ),
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        mode: online ? 'online' : 'vs_cpu'
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'matches', showError);
@@ -793,7 +802,7 @@ export const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, 
         )}>
           <div className="text-center">
             <h2 className="text-5xl font-black italic uppercase tracking-tighter mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">
-              Tic-Tac-Toe
+              Jogo da Velha
             </h2>
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold tracking-widest uppercase opacity-60">
               {online ? (
@@ -1048,7 +1057,7 @@ export const TicTacToe = ({ vsCPU, difficulty = 'Easy', online, socket, roomId, 
                 </div>
                 <div>
                   <h3 className="text-2xl font-black italic uppercase tracking-tighter">How to Play</h3>
-                  <p className="text-[10px] font-bold tracking-widest uppercase opacity-40">Tic-Tac-Toe Rules</p>
+                  <p className="text-[10px] font-bold tracking-widest uppercase opacity-40">Jogo da Velha Rules</p>
                 </div>
               </div>
 

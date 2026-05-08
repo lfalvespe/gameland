@@ -1,5 +1,5 @@
 import React from 'react';
-import { Gamepad2, Trophy, Users, LogOut } from 'lucide-react';
+import { Gamepad2, Trophy, Users, LogOut, Maximize2, Minimize2 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { auth, signOut } from '../firebase';
@@ -8,20 +8,56 @@ import { cn } from '../lib/utils';
 export const Navbar = ({ onViewProfile, onViewDashboard, pendingRequestsCount }: { onViewProfile: () => void, onViewDashboard: () => void, pendingRequestsCount: number }) => {
   const { user, profile } = useAuth();
   const { theme } = useTheme();
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   return (
     <nav className={cn(
-      "fixed top-0 left-0 right-0 z-50 px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between border-b backdrop-blur-md",
+      "fixed top-0 left-0 right-0 z-50 h-16 sm:h-[120px] px-4 sm:px-6 flex items-center justify-between border-b backdrop-blur-md",
       theme === 'cyberpunk' ? "border-yellow-400/30 bg-black/80" :
       theme === 'forest' ? "border-emerald-500/30 bg-emerald-950/80" :
       "border-white/10 bg-slate-900/80"
     )}>
+      {/* Left: Brand Logo Text */}
       <div 
-        className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group"
+        className="flex items-center cursor-pointer group h-full"
         onClick={onViewDashboard}
       >
-        <Gamepad2 className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 group-hover:rotate-12 transition-transform" />
-        <span className="text-lg sm:text-2xl font-bold tracking-tighter italic">GAMELAND</span>
+        <img 
+          src="/brand/logo-text.png" 
+          alt="GameLand" 
+          className="h-full w-auto object-contain hover:scale-105 transition-transform" 
+          referrerPolicy="no-referrer"
+        />
+      </div>
+
+      {/* Center: Rectangular Banner (Desktop Only for better density) */}
+      <div className="absolute left-1/2 -translate-x-1/2 h-full py-1 pointer-events-none hidden lg:block">
+        <img 
+          src="/brand/rectangular-banner.png?v=3" 
+          alt="GameLand Portal" 
+          className="h-full w-auto object-contain" 
+          referrerPolicy="no-referrer"
+        />
       </div>
 
       <div className="flex items-center gap-2 sm:gap-6">
@@ -29,6 +65,18 @@ export const Navbar = ({ onViewProfile, onViewDashboard, pendingRequestsCount }:
           <Trophy className="w-4 h-4 text-yellow-400" />
           <span className="text-xs sm:text-sm font-mono">{profile?.score || 0} PTS</span>
         </div>
+
+        <button 
+          onClick={toggleFullscreen}
+          className="p-2 hover:bg-white/10 rounded-full transition-colors group"
+          title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-5 h-5 text-white/70 group-hover:text-white" />
+          ) : (
+            <Maximize2 className="w-5 h-5 text-white/70 group-hover:text-white" />
+          )}
+        </button>
 
         <button 
           onClick={onViewDashboard}

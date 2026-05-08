@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { useError } from '../ErrorContext';
 import { db, doc, updateDoc, OperationType, handleFirestoreError, collection, query, orderBy, getDocs, where, limit, getDoc, deleteDoc, auth, deleteUser, reauthenticateWithPopup, googleProvider } from '../firebase';
+import { normalizeString } from '../lib/stringUtils';
 import { cn } from '../lib/utils';
 
 const countries = [
@@ -75,6 +76,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [showHangmanDetails, setShowHangmanDetails] = useState(false);
 
   useEffect(() => {
     if (!isOwnProfile && targetUserId) {
@@ -105,6 +107,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
         const q = query(
           collection(db, 'matches'),
           where('players', 'array-contains', profileId),
+          where('mode', '==', 'online'),
           orderBy('createdAt', 'desc'),
           limit(5)
         );
@@ -236,6 +239,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: editForm.displayName,
+        displayName_normalized: normalizeString(editForm.displayName),
         city: editForm.city,
         country: editForm.country,
         photoURL: editForm.photoURL,
@@ -299,10 +303,11 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
   const getBestGame = () => {
     const stats = profile?.stats || {};
     const games = [
-      { id: 'Tic-Tac-Toe', wins: stats.ticTacToe?.wins || 0, icon: Grid3X3, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-      { id: 'Checkers', wins: stats.checkers?.wins || 0, icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' },
-      { id: 'Ludo', wins: stats.ludo?.wins || 0, icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
-      { id: 'Hangman', wins: stats.hangman?.wins || 0, icon: Users, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+      { id: 'Tic-Tac-Toe', wins: stats.ticTacToe?.wins || 0, image: '/icons/tic-tac-toe.png', icon: Grid3X3, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+      { id: 'Checkers', wins: stats.checkers?.wins || 0, image: '/icons/checkers.png', icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' },
+      { id: 'Ludo', wins: stats.ludo?.wins || 0, image: '/icons/ludo.png', icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
+      { id: 'Hangman', wins: stats.hangman?.wins || 0, image: '/icons/forca-battle.png', icon: Users, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+      { id: 'Snakes-Ladders', wins: stats.snakesLadders?.wins || 0, image: '/icons/snakes-and-ladders.png', icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
     ];
     
     // Sort by wins, then by name as fallback
@@ -318,22 +323,32 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
       { 
         id: 'Tic-Tac-Toe', 
         total: (stats.ticTacToe?.wins || 0) + (stats.ticTacToe?.losses || 0) + (stats.ticTacToe?.draws || 0), 
+        image: '/icons/tic-tac-toe.png',
         icon: Grid3X3, color: 'text-purple-400', bg: 'bg-purple-400/10' 
       },
       { 
         id: 'Checkers', 
         total: (stats.checkers?.wins || 0) + (stats.checkers?.losses || 0) + (stats.checkers?.draws || 0), 
+        image: '/icons/checkers.png',
         icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' 
       },
       { 
         id: 'Ludo', 
         total: (stats.ludo?.wins || 0) + (stats.ludo?.losses || 0) + (stats.ludo?.draws || 0), 
+        image: '/icons/ludo.png',
         icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' 
       },
       { 
         id: 'Hangman', 
         total: (stats.hangman?.wins || 0) + (stats.hangman?.losses || 0) + (stats.hangman?.draws || 0) + (stats.hangman?.total || 0), 
+        image: '/icons/forca-battle.png',
         icon: Users, color: 'text-blue-400', bg: 'bg-blue-400/10' 
+      },
+      { 
+        id: 'Snakes-Ladders', 
+        total: (stats.snakesLadders?.wins || 0) + (stats.snakesLadders?.losses || 0), 
+        image: '/icons/snakes-and-ladders.png',
+        icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' 
       },
     ];
     
@@ -368,14 +383,14 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
   }
 
   return (
-    <div className="pt-20 sm:pt-24 px-4 sm:px-6 pb-12 max-w-4xl mx-auto">
+    <div className="pt-20 sm:pt-36 px-4 sm:px-6 pb-12 max-w-4xl mx-auto">
       <motion.button 
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         onClick={onBack}
         className="mb-8 flex items-center gap-2 text-sm opacity-50 hover:opacity-100 transition-opacity"
       >
-        <Search className="w-4 h-4 rotate-180" /> Back to Dashboard
+        <Search className="w-4 h-4 rotate-180" /> Voltar ao Painel
       </motion.button>
 
       <motion.div 
@@ -394,7 +409,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
               className="absolute top-4 right-4 p-3 bg-black/40 backdrop-blur-md rounded-2xl border border-white/20 hover:bg-black/60 transition-all flex items-center gap-2 text-xs font-bold"
             >
               <Settings className="w-4 h-4" />
-              Change Banner
+              Alterar Banner
             </button>
           )}
 
@@ -425,7 +440,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
           {!isOwnProfile && (
             <div className="absolute top-8 left-12 flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
               <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Viewing Explorer</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Visualizando Perfil</span>
             </div>
           )}
           
@@ -658,10 +673,10 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
                         onChange={e => setEditForm({...editForm, favoriteGame: e.target.value})}
                         className="w-full bg-slate-900 border border-white/10 rounded-2xl px-5 py-3.5 focus:outline-none focus:border-blue-500 appearance-none font-medium"
                       >
-                        <option value="Tic-Tac-Toe">Tic-Tac-Toe</option>
-                        <option value="Checkers">Checkers</option>
+                        <option value="Tic-Tac-Toe">Jogo da Velha</option>
+                        <option value="Checkers">Damas</option>
                         <option value="Ludo">Ludo</option>
-                        <option value="Hangman">Hangman</option>
+                        <option value="Hangman">Forca Batalha</option>
                         <option value="Chess">Chess (Coming Soon)</option>
                       </select>
                     </div>
@@ -782,69 +797,97 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
 
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
-                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Tic-Tac-Toe</p>
+                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Jogo da Velha</p>
                   <p className="text-lg font-black">{profile?.stats?.ticTacToe?.wins || 0}W / {profile?.stats?.ticTacToe?.losses || 0}L</p>
                 </div>
                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
-                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Checkers</p>
+                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Damas</p>
                   <p className="text-lg font-black">{profile?.stats?.checkers?.wins || 0}W / {profile?.stats?.checkers?.losses || 0}L</p>
                 </div>
                 <div className="p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
                   <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Ludo</p>
                   <p className="text-lg font-black">{profile?.stats?.ludo?.wins || 0}W / {profile?.stats?.ludo?.losses || 0}L</p>
                 </div>
-                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
-                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity">Hangman</p>
+                <div 
+                  onClick={() => setShowHangmanDetails(!showHangmanDetails)}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.02] active:scale-95",
+                    showHangmanDetails ? "bg-purple-500/10 border-purple-500/50" : "bg-white/5 border-white/5 hover:bg-white/10"
+                  )}
+                >
+                  <p className="text-[10px] uppercase tracking-widest opacity-40 font-bold mb-1 group-hover:opacity-100 transition-opacity flex items-center justify-between">
+                    Forca Batalha
+                    <TrendingUp className={cn("w-3 h-3 transition-transform", showHangmanDetails && "rotate-180")} />
+                  </p>
                   <p className="text-lg font-black">{profile?.stats?.hangman?.wins || 0}W / {profile?.stats?.hangman?.losses || 0}L</p>
                 </div>
               </div>
 
-              {profile?.stats?.hangman && profile.stats.hangman.total > 0 && (
-                <div className="mb-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-purple-400" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Hangman Win Rate</p>
-                      <p className="text-xl font-black italic">
-                        {Math.round(((profile.stats.hangman.wins || 0) / (profile.stats.hangman.total || 1)) * 100)}%
-                      </p>
+              <AnimatePresence>
+                {showHangmanDetails && profile?.stats?.hangman && profile.stats.hangman.total > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginBottom: 32 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-purple-400" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Taxa de Vitória</p>
+                          <p className="text-xl font-black italic">
+                            {Math.round(((profile.stats.hangman.wins || 0) / (profile.stats.hangman.total || 1)) * 100)}%
+                          </p>
+                        </div>
+                      </div>
+                      <div className="p-6 bg-gradient-to-br from-rose-500/10 to-orange-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-rose-400" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Média de Erros</p>
+                          <p className="text-xl font-black italic">
+                            {((profile.stats.hangman.totalMistakes || 0) / (profile.stats.hangman.total || 1)).toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
+                        <Palette className="w-5 h-5 text-blue-400" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Tema Favorito</p>
+                          <p className="text-sm font-black truncate max-w-full italic px-2">
+                            {Object.entries(profile.stats.hangman.themesPlayed || {}).sort((a: [string, any], b: [string, any]) => (b[1] as number) - (a[1] as number))[0]?.[0]?.replace(/_/g, ' ') || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-6 bg-gradient-to-br from-rose-500/10 to-orange-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-rose-400" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Avg. Mistakes</p>
-                      <p className="text-xl font-black italic">
-                        {((profile.stats.hangman.totalMistakes || 0) / (profile.stats.hangman.total || 1)).toFixed(1)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 rounded-3xl border border-white/10 flex flex-col items-center text-center gap-2">
-                    <Palette className="w-5 h-5 text-blue-400" />
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Top Theme</p>
-                      <p className="text-sm font-black truncate max-w-full italic px-2">
-                        {Object.entries(profile.stats.hangman.themesPlayed || {}).sort((a: [string, any], b: [string, any]) => (b[1] as number) - (a[1] as number))[0]?.[0]?.replace(/_/g, ' ') || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-              {bestGame && (
+               {bestGame && (
                 <div className="mb-8 p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-3xl border border-white/10 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-700">
-                    <bestGame.icon className="w-24 h-24 rotate-12" />
+                    {bestGame.image ? (
+                      <img src={bestGame.image} alt={bestGame.id} className="w-24 h-24 object-contain rotate-12" referrerPolicy="no-referrer" />
+                    ) : (
+                      <bestGame.icon className="w-24 h-24 rotate-12" />
+                    )}
                   </div>
                   <div className="relative z-10">
-                    <h4 className="text-[10px] uppercase tracking-widest font-black text-blue-400 mb-2">Better in</h4>
+                    <h4 className="text-[10px] uppercase tracking-widest font-black text-blue-400 mb-2">Melhor em</h4>
                     <div className="flex items-center gap-4">
-                      <div className={cn("p-4 rounded-2xl", bestGame.bg)}>
-                        <bestGame.icon className={cn("w-8 h-8", bestGame.color)} />
+                      <div className={cn("p-2 rounded-2xl w-16 h-16 flex items-center justify-center overflow-hidden", bestGame.bg)}>
+                        {bestGame.image ? (
+                          <img src={bestGame.image} alt={bestGame.id} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <bestGame.icon className={cn("w-8 h-8", bestGame.color)} />
+                        )}
                       </div>
                       <div>
-                        <p className="text-2xl font-black italic uppercase italic tracking-tighter">{bestGame.id}</p>
-                        <p className="text-sm opacity-60 font-medium">Record: {bestGame.wins} Victories</p>
+                        <p className="text-2xl font-black italic uppercase italic tracking-tighter">
+                          {bestGame.id === 'Tic-Tac-Toe' ? 'Jogo da Velha' : bestGame.id === 'Hangman' ? 'Forca Batalha' : bestGame.id === 'Snakes-Ladders' ? 'Cobras e Escadas' : bestGame.id}
+                        </p>
+                        <p className="text-sm opacity-60 font-medium">Recorde: {bestGame.wins} Vitórias</p>
                       </div>
                     </div>
                   </div>
@@ -854,17 +897,27 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
               {mostPlayed && (
                 <div className="mb-8 p-6 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-3xl border border-white/10 relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity duration-700">
-                    <mostPlayed.icon className="w-24 h-24 rotate-12" />
+                    {mostPlayed.image ? (
+                      <img src={mostPlayed.image} alt={mostPlayed.id} className="w-24 h-24 object-contain rotate-12" referrerPolicy="no-referrer" />
+                    ) : (
+                      <mostPlayed.icon className="w-24 h-24 rotate-12" />
+                    )}
                   </div>
                   <div className="relative z-10">
-                    <h4 className="text-[10px] uppercase tracking-widest font-black text-purple-400 mb-2">Most Played</h4>
+                    <h4 className="text-[10px] uppercase tracking-widest font-black text-purple-400 mb-2">Mais Jogado</h4>
                     <div className="flex items-center gap-4">
-                      <div className={cn("p-4 rounded-2xl", mostPlayed.bg)}>
-                        <mostPlayed.icon className={cn("w-8 h-8", mostPlayed.color)} />
+                      <div className={cn("p-2 rounded-2xl w-16 h-16 flex items-center justify-center overflow-hidden", mostPlayed.bg)}>
+                        {mostPlayed.image ? (
+                          <img src={mostPlayed.image} alt={mostPlayed.id} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <mostPlayed.icon className={cn("w-8 h-8", mostPlayed.color)} />
+                        )}
                       </div>
                       <div>
-                        <p className="text-2xl font-black italic uppercase italic tracking-tighter">{mostPlayed.id}</p>
-                        <p className="text-sm opacity-60 font-medium">{mostPlayed.total} Matches Played</p>
+                        <p className="text-2xl font-black italic uppercase italic tracking-tighter">
+                          {mostPlayed.id === 'Tic-Tac-Toe' ? 'Jogo da Velha' : mostPlayed.id === 'Hangman' ? 'Forca Batalha' : mostPlayed.id === 'Snakes-Ladders' ? 'Cobras e Escadas' : mostPlayed.id}
+                        </p>
+                        <p className="text-sm opacity-60 font-medium">{mostPlayed.total} Partidas Jogadas</p>
                       </div>
                     </div>
                   </div>
@@ -885,14 +938,23 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
                         "w-10 h-10 rounded-xl flex items-center justify-center",
                         match.gameType === 'Tic-Tac-Toe' ? "bg-blue-500/10 text-blue-400" : 
                         match.gameType === 'Hangman' ? "bg-purple-500/10 text-purple-400" :
+                        match.gameType === 'Ludo' ? "bg-yellow-500/10 text-yellow-400" :
                         "bg-rose-500/10 text-rose-400"
                       )}>
-                        {match.gameType === 'Tic-Tac-Toe' ? <Grid3X3 className="w-5 h-5" /> : 
-                         match.gameType === 'Hangman' ? <Users className="w-5 h-5" /> :
-                         <Disc className="w-5 h-5" />}
+                        {match.gameType === 'Tic-Tac-Toe' ? <img src="/icons/tic-tac-toe.png" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" /> : 
+                         match.gameType === 'Hangman' ? <img src="/icons/forca-battle.png" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" /> :
+                         match.gameType === 'Ludo' ? <img src="/icons/ludo.png" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" /> :
+                         match.gameType === 'Snakes-Ladders' ? <img src="/icons/snakes-and-ladders.png" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" /> :
+                         <img src="/icons/checkers.png" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />}
                       </div>
                       <div>
-                        <p className="text-sm font-bold">{match.gameType}</p>
+                        <p className="text-sm font-bold">
+                          {match.gameType === 'Tic-Tac-Toe' ? 'Jogo da Velha' : 
+                           match.gameType === 'Checkers' ? 'Damas' : 
+                           match.gameType === 'Hangman' ? 'Forca Batalha' : 
+                           match.gameType === 'Snakes-Ladders' ? 'Cobras e Escadas' :
+                           match.gameType}
+                        </p>
                         <p className="text-[10px] opacity-40 uppercase tracking-widest font-black">
                           {match.createdAt ? new Date(match.createdAt.toDate ? match.createdAt.toDate() : match.createdAt).toLocaleDateString() : 'Recent'}
                         </p>
@@ -920,7 +982,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
             <section className="bg-white/5 rounded-[30px] sm:rounded-[40px] border border-white/10 p-6 sm:p-10">
               <div className="flex items-center gap-3 mb-8">
                 < Award className="w-6 h-6 text-amber-400" />
-                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Badges</h3>
+                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Distintivos</h3>
               </div>
               
               <div className="grid grid-cols-2 gap-3">
@@ -939,7 +1001,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
               <section className="bg-white/5 rounded-[30px] sm:rounded-[40px] border border-white/10 p-6 sm:p-10 overflow-hidden relative">
                 <div className="flex items-center gap-3 mb-6">
                   <Palette className="w-6 h-6 text-pink-400" />
-                  <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Interface Theme</h3>
+                  <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Tema da Interface</h3>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   {[
@@ -969,16 +1031,16 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
               <section className="bg-rose-500/5 rounded-[30px] sm:rounded-[40px] border border-rose-500/10 p-6 sm:p-10 overflow-hidden relative">
                 <div className="flex items-center gap-3 mb-4">
                   <Trash2 className="w-6 h-6 text-rose-500" />
-                  <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter text-rose-500">Danger Zone</h3>
+                  <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter text-rose-500">Zona de Perigo</h3>
                 </div>
                 <p className="text-xs text-rose-500/60 mb-6 font-medium leading-relaxed">
-                  Deleting your account will permanently erase your profile and stats for all roles (Admin, Moderator, or Player). This action is irreversible.
+                  Excluir sua conta irá apagar permanentemente seu perfil e estatísticas para todos os cargos (Admin, Moderador ou Jogador). Esta ação é irreversível.
                 </p>
                 <button 
                   onClick={() => setShowDeleteConfirm(true)}
                   className="w-full py-4 border border-rose-500/20 bg-rose-500/5 text-rose-500 rounded-2xl font-black tracking-widest text-[10px] uppercase hover:bg-rose-500 hover:text-white transition-all active:scale-95"
                 >
-                  Permanently Delete My Account
+                  Excluir Minha Conta Permanentemente
                 </button>
               </section>
             )}
@@ -986,10 +1048,10 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
             <section className="bg-white/5 rounded-[30px] sm:rounded-[40px] border border-white/10 p-6 sm:p-10 overflow-hidden relative">
               <div className="flex items-center gap-3 mb-6">
                 <Gamepad2 className="w-6 h-6 text-purple-400" />
-                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Interests</h3>
+                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Interesses</h3>
               </div>
               <div className="flex flex-wrap gap-2">
-                {(profile?.interests || ['Strategic', 'Competitive', 'Fast-Paced', 'Retro']).map(tag => (
+                {(profile?.interests || ['Estratégia', 'Competitivo', 'Rápido', 'Retrô']).map(tag => (
                   <span key={tag} className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-full text-[10px] font-bold uppercase tracking-widest opacity-60">
                     {tag}
                   </span>
@@ -1000,7 +1062,7 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
             <section className="bg-white/5 rounded-[30px] sm:rounded-[40px] border border-white/10 p-6 sm:p-10">
               <div className="flex items-center gap-3 mb-8">
                 <Trophy className="w-6 h-6 text-rose-500" />
-                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Achievements</h3>
+                <h3 className="text-lg sm:text-xl font-black italic uppercase tracking-tighter">Conquistas</h3>
               </div>
               <div className="space-y-4">
                 {achievementsList.map((ach) => (
@@ -1031,19 +1093,19 @@ export const ProfileView = ({ onBack, targetUserId, onMessage, onInvite }: {
           animate={{ opacity: 1, y: 0 }}
           className="mt-8 bg-white/5 rounded-[30px] sm:rounded-[40px] border border-white/10 p-6 sm:p-12 text-center sm:text-left"
         >
-          <div className="flex flex-col sm:flex-row items-center gap-3 mb-8">
-            <Shield className="w-8 h-8 text-rose-500" />
-            <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter">User Management</h2>
-          </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3 mb-8">
+              <Shield className="w-8 h-8 text-rose-500" />
+              <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter">Gerenciamento de Usuários</h2>
+            </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-white/10">
-                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold">User</th>
-                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold">Role</th>
+                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold">Usuário</th>
+                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold">Cargo</th>
                   <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold">Status</th>
-                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold text-right">Actions</th>
+                  <th className="pb-4 text-[10px] uppercase tracking-widest opacity-40 font-bold text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">

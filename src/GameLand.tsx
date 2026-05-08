@@ -166,10 +166,11 @@ export default function GameLand() {
 
           await setDoc(doc(db, 'rooms', data.roomId), roomUpdate, { merge: true });
 
-          if (data.gameType === 'Forca') {
+          if (data.gameType === 'Forca Batalha' || data.gameType === 'Forca Clássico') {
             await setDoc(doc(db, 'hangman_matches', data.roomId), {
               players: [data.fromUserId, data.toUserId],
               status: 'setup',
+              variant: data.gameType === 'Forca Clássico' ? 'classic' : 'battle',
               playerData: {},
               scores: {},
               currentRound: 0,
@@ -186,7 +187,8 @@ export default function GameLand() {
           'Tic-Tac-Toe': 'tictactoe_online',
           'Checkers': 'checkers_online',
           'Ludo': 'ludo_online',
-          'Forca': 'hangman_online'
+          'Forca Batalha': 'hangman_online',
+          'Forca Clássico': 'hangman_classic_online'
         };
         setActiveGame(gameMap[data.gameType] || 'tictactoe_online');
         setInvite(null);
@@ -298,8 +300,22 @@ export default function GameLand() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center gap-6">
+          <motion.img 
+            src="/brand/logo-text.png" 
+            alt="GameLand"
+            className="w-48 h-auto object-contain"
+            animate={{ 
+              scale: [1, 1.1, 1],
+              opacity: [0.5, 1, 0.5]
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            referrerPolicy="no-referrer"
+          />
           <p className="text-sm font-bold uppercase tracking-widest opacity-40">Loading GameLand...</p>
         </div>
       </div>
@@ -432,7 +448,7 @@ export default function GameLand() {
                     setView('dashboard');
                     setActiveRoom({ 
                       id: n.roomId, 
-                      name: n.gameType === 'Tic-Tac-Toe' ? 'Tic-Tac-Toe' : 'Checkers', 
+                      name: n.gameType === 'Tic-Tac-Toe' ? 'Jogo da Velha' : (n.gameType === 'Checkers' ? 'Damas' : n.gameType), 
                       isPrivate: n.roomId.startsWith('game_'),
                       friendId: n.senderId 
                     });
@@ -446,14 +462,23 @@ export default function GameLand() {
             ))}
           </AnimatePresence>
 
-          <footer className="py-8 px-6 border-t border-white/5 bg-slate-900/50 backdrop-blur-sm">
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 opacity-40">
-              <div className="flex items-center gap-2">
-                <Gamepad2 className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">GameLand &copy; {new Date().getFullYear()}</span>
+          <footer className="py-4 px-6 border-t border-white/5 bg-slate-900/50 backdrop-blur-sm">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className="flex items-center gap-6">
+                <div className="relative group">
+                  <div className="absolute -inset-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full blur opacity-10 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+                  <img src="/brand/round-banner.png" className="relative h-20 w-20 object-contain rounded-full border border-white/10 shadow-2xl transition-transform group-hover:scale-105" alt="GameLand" referrerPolicy="no-referrer" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-black uppercase tracking-[0.4em] text-white">GameLand</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest opacity-40 italic">Where Legends Are Born &copy; {new Date().getFullYear()}</span>
+                </div>
               </div>
-              <div className="text-[10px] font-bold uppercase tracking-widest">
-                Developed by <span className="text-blue-400">Fernando Alves</span>
+              <div className="flex items-center gap-6">
+                <div className="h-px w-12 bg-white/10 hidden md:block" />
+                <div className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-40">
+                  Developed by <span className="text-blue-400 font-black">Fernando Alves</span>
+                </div>
               </div>
             </div>
           </footer>

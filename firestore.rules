@@ -51,9 +51,10 @@ service cloud.firestore {
     // Collection: users
     // ===============================================================
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'displayName', 'email']) &&
+      return data.keys().hasAll(['uid', 'displayName', 'displayName_normalized', 'email']) &&
              data.uid is string && data.uid.size() <= 128 &&
              data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 64 &&
+             data.displayName_normalized is string && data.displayName_normalized.size() > 0 && data.displayName_normalized.size() <= 64 &&
              data.email is string && data.email.size() <= 128;
     }
 
@@ -106,6 +107,7 @@ service cloud.firestore {
     match /matches/{matchId} {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid in incoming().players;
+      allow delete: if isAdmin() || isModerator();
     }
 
     // ===============================================================
@@ -122,7 +124,7 @@ service cloud.firestore {
     match /rooms/{roomId} {
       allow get: if isSignedIn() && (
         isAdmin() || isModerator() ||
-        (resource == null && roomId.matches('.*' + request.auth.uid + '.*')) ||
+        roomId.matches('.*' + request.auth.uid + '.*') ||
         (resource != null && (
           request.auth.uid in resource.data.participants || 
           resource.data.status == 'waiting' ||
@@ -145,10 +147,15 @@ service cloud.firestore {
     // ===============================================================
     function isValidHangmanMatch(data) {
       return data.keys().hasAll(['players', 'status', 'playerData', 'scores', 'currentRound']) &&
-             data.players is list && data.players.size() <= 4 &&
+             data.players is list && data.players.size() <= 6 &&
              data.status in ['setup', 'playing', 'round1_result', 'finished'] &&
              data.currentRound is number &&
-             isValidId(data.players[0]);
+             isValidId(data.players[0]) &&
+             (!('word' in data) || (data.word is string && data.word.size() <= 100)) &&
+             (!('hint' in data) || (data.hint is string && data.hint.size() <= 300)) &&
+             (!('selectedTheme' in data) || (data.selectedTheme is string && data.selectedTheme.size() <= 100)) &&
+             (!('selectedDifficulty' in data) || (data.selectedDifficulty in ['Easy', 'Medium', 'Hard'])) &&
+             (!('variant' in data) || (data.variant in ['classic', 'battle']));
     }
 
     match /hangman_matches/{matchId} {
@@ -164,10 +171,10 @@ service cloud.firestore {
                     request.auth.uid in incoming().players;
       allow update: if isSignedIn() && (
         isAdmin() || isModerator() ||
-        (request.auth.uid in existing().players && (
-          // Action: Setup (Ready/Word) - Host started game or someone changed status
+        (request.auth.uid in existing().players && isValidHangmanMatch(incoming()) && (
+          // Action: Setup (Ready/Word/Theme)
           (existing().status == 'setup' && 
-           incoming().diff(existing()).affectedKeys().hasOnly(['players', 'playerData', 'status', 'startTime', 'updatedAt'])) ||
+           incoming().diff(existing()).affectedKeys().hasOnly(['players', 'playerData', 'status', 'startTime', 'updatedAt', 'selectedTheme', 'selectedDifficulty', 'variant', 'scores', 'currentRound'])) ||
           
           // Action: Participant Setup (Ready/Word)
           (incoming().diff(existing()).affectedKeys().hasOnly(['playerData', 'updatedAt'])) ||
@@ -176,7 +183,7 @@ service cloud.firestore {
           (existing().status == 'setup' && 
            incoming().status == 'playing' && 
            request.auth.uid == existing().players[0] &&
-           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'startTime', 'playerData', 'updatedAt'])) ||
+           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'startTime', 'playerData', 'targetMappings', 'updatedAt', 'word', 'hint', 'selectedTheme', 'selectedDifficulty'])) ||
           
           // Action: Play/Guess/Finish
           (existing().status == 'playing' && 
@@ -185,7 +192,7 @@ service cloud.firestore {
         // Action: Join during setup
         (existing().status == 'setup' && 
          incoming().diff(existing()).affectedKeys().hasOnly(['players', 'updatedAt']) && 
-         incoming().players.size() <= 4 &&
+         incoming().players.size() <= 6 &&
          incoming().players.hasAll(existing().players) &&
          request.auth.uid in incoming().players)
       );

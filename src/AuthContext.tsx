@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { auth, onAuthStateChanged, db, doc, getDoc, setDoc, updateDoc, OperationType, handleFirestoreError } from './firebase';
+import { auth, onAuthStateChanged, db, doc, getDoc, setDoc, updateDoc, OperationType, handleFirestoreError, onSnapshot } from './firebase';
 import { User } from 'firebase/auth';
+import { normalizeString } from './lib/stringUtils';
 
 interface UserProfile {
   uid: string;
   displayName: string;
+  displayName_normalized: string;
   email: string;
   photoURL: string;
   bannerURL?: string;
@@ -31,6 +33,7 @@ interface UserProfile {
       totalMistakes?: number;
       themesPlayed?: Record<string, number>;
     };
+    snakesLadders?: { wins: number; losses: number };
   };
   score: number;
   theme: 'classic' | 'cyberpunk' | 'forest';
@@ -62,23 +65,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       setUser(user);
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
-            // Force admin role for the specific user email and persist it
-            if (user.email === 'lfalvespe@gmail.com' && data.role !== 'admin') {
-              data.role = 'admin';
-              await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
-            }
-            setProfile({ uid: user.uid, ...data });
-          } else {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+            if (userDoc.exists()) {
+              const data = userDoc.data() as UserProfile;
+              const expectedNormalized = normalizeString(user.displayName || data.displayName || 'Player');
+              
+              const updates: any = {};
+              if (!data.displayName_normalized || data.displayName_normalized !== expectedNormalized) {
+                updates.displayName_normalized = expectedNormalized;
+              }
+              // Sync displayName if it changed on Google side
+              if (user.displayName && user.displayName !== data.displayName) {
+                updates.displayName = user.displayName;
+              }
+
+              if (Object.keys(updates).length > 0) {
+                await updateDoc(userDocRef, updates);
+              }
+              
+              // Force admin role for the specific user email and persist it
+              if (user.email === 'lfalvespe@gmail.com' && data.role !== 'admin') {
+                await updateDoc(userDocRef, { role: 'admin' });
+              }
+            } else {
             const newProfile: UserProfile = {
               uid: user.uid,
               displayName: user.displayName || 'Player',
+              displayName_normalized: normalizeString(user.displayName || 'Player'),
               email: user.email || '',
               photoURL: user.photoURL || '',
               score: 0,
@@ -87,9 +113,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               banned: false,
               online: true,
             };
-            await setDoc(doc(db, 'users', user.uid), newProfile);
-            setProfile(newProfile);
+            await setDoc(userDocRef, newProfile);
           }
+
+          // Setup real-time listener
+          unsubscribeProfile = onSnapshot(userDocRef, (snapshot) => {
+            if (snapshot.exists()) {
+              setProfile({ uid: user.uid, ...(snapshot.data() as UserProfile) });
+            }
+          }, (error) => {
+             handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          });
+
         } catch (error) {
           handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
         }
@@ -100,7 +135,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthReady(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   return (

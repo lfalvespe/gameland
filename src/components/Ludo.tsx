@@ -62,14 +62,14 @@ const Dice3D = ({ value, rolling, color }: { value: number | null, rolling: bool
   const target = faceRotations[(value || 1) as keyof typeof faceRotations];
 
   const getFaceClass = (color: LudoColor) => {
-    const base = "absolute inset-0 rounded-lg border-2 flex items-center justify-center border-white/40 text-white overflow-hidden shadow-lg backdrop-blur-[6px]";
-    const gradients = {
-      red: "bg-gradient-to-br from-rose-400/40 to-rose-700/40",
-      blue: "bg-gradient-to-br from-blue-400/40 to-blue-700/40",
-      yellow: "bg-gradient-to-br from-yellow-300/40 to-yellow-600/40",
-      green: "bg-gradient-to-br from-green-400/40 to-green-700/40"
+    const base = "absolute inset-0 rounded-lg border-2 flex items-center justify-center overflow-hidden shadow-lg";
+    const colors = {
+      red: "border-rose-500 text-rose-500",
+      blue: "border-blue-500 text-blue-500",
+      yellow: "border-yellow-500 text-yellow-500",
+      green: "border-green-500 text-green-500"
     };
-    return cn(base, gradients[color]);
+    return cn(base, colors[color]);
   };
 
   const Shine = () => (
@@ -95,13 +95,17 @@ const Dice3D = ({ value, rolling, color }: { value: number | null, rolling: bool
   return (
     <div className="w-16 h-16 perspective-1000">
       <motion.div
+        key={rolling ? 'rolling' : 'idle'}
+        style={{ 
+          transformStyle: 'preserve-3d',
+          willChange: 'transform'
+        }}
         animate={rolling ? {
-          rotateX: [0, 720, 1440],
-          rotateY: [0, 540, 1080],
-          x: [0, -12, 12, -8, 0],
-          y: [0, 10, -10, 8, 0],
-          z: [0, 30, 0],
-          scale: [1, 1.15, 1]
+          rotateX: [0, 360, 720],
+          rotateY: [0, 360, 720],
+          x: [0, -4, 4, 0],
+          y: [0, 4, -4, 0],
+          scale: [1, 1.1, 1]
         } : {
           rotateX: target.x,
           rotateY: target.y,
@@ -111,45 +115,44 @@ const Dice3D = ({ value, rolling, color }: { value: number | null, rolling: bool
           scale: 1
         }}
         transition={rolling ? {
-          duration: 0.8,
+          duration: 0.6,
           repeat: Infinity,
-          ease: "easeInOut"
+          ease: "linear"
         } : {
           type: "spring",
-          stiffness: 100, // Even softer for "perfect" settle
-          damping: 12,
-          mass: 1.5,      // Slightly heavier feel
-          restDelta: 0.001
+          stiffness: 150,
+          damping: 15,
+          mass: 1
         }}
-        className="w-full h-full relative transform-3d"
+        className="w-full h-full relative"
       >
         {/* Face 1 */}
-        <div style={{ transform: 'rotateY(0deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateY(0deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(1)}
            <Shine />
         </div>
         {/* Face 6 */}
-        <div style={{ transform: 'rotateY(180deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateY(180deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(6)}
            <Shine />
         </div>
         {/* Face 2 */}
-        <div style={{ transform: 'rotateY(90deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateY(90deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(2)}
            <Shine />
         </div>
         {/* Face 5 */}
-        <div style={{ transform: 'rotateY(-90deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateY(-90deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(5)}
            <Shine />
         </div>
         {/* Face 3 */}
-        <div style={{ transform: 'rotateX(90deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateX(90deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(3)}
            <Shine />
         </div>
         {/* Face 4 */}
-        <div style={{ transform: 'rotateX(-90deg) translateZ(32px)' }} className={getFaceClass(color)}>
+        <div style={{ transform: 'rotateX(-90deg) translateZ(32px)', backfaceVisibility: 'hidden' }} className={getFaceClass(color)}>
            {renderFaceContent(4)}
            <Shine />
         </div>
@@ -158,7 +161,7 @@ const Dice3D = ({ value, rolling, color }: { value: number | null, rolling: bool
   );
 };
 
-const Piece = ({ color, turn, canMove, onClick, id, size = "w-8 h-8", isLeft, players, isFinished }: { 
+const Piece = ({ color, turn, canMove, onClick, id, size = "w-8 h-8", isLeft, players, isFinished, isHome = true }: { 
   color: LudoColor, 
   turn: string, 
   diceValue: number | null, 
@@ -168,7 +171,8 @@ const Piece = ({ color, turn, canMove, onClick, id, size = "w-8 h-8", isLeft, pl
   size?: string,
   isLeft?: boolean,
   players: any[],
-  isFinished?: boolean
+  isFinished?: boolean,
+  isHome?: boolean
 }) => {
   const player = players.find(p => p.color === color);
   const avatarUrl = player?.isBot 
@@ -256,24 +260,14 @@ const Piece = ({ color, turn, canMove, onClick, id, size = "w-8 h-8", isLeft, pl
 
         {/* The Piece Structure */}
         <div className="relative w-full h-full flex flex-col items-center justify-center">
-          {/* Base/Body */}
+          {/* Avatar Area (Unified full bleed design) */}
           <div className={cn(
-            "absolute bottom-0 w-[95%] h-[85%] rounded-[35%] border-b-2 border-white/20 shadow-2xl transition-transform duration-300 backdrop-blur-[4px]",
-            color === 'red' ? "bg-gradient-to-t from-rose-900/40 via-rose-600/40 to-rose-400/40" :
-            color === 'blue' ? "bg-gradient-to-t from-blue-900/40 via-blue-600/40 to-blue-400/40" :
-            color === 'yellow' ? "bg-gradient-to-t from-yellow-800/40 via-yellow-500/40 to-yellow-300/40" :
-            "bg-gradient-to-t from-green-900/40 via-green-600/40 to-green-400/40",
-            !isLeft && canMove && turn === color && "ring-2 ring-white/50 animate-pulse"
-          )} />
-
-          {/* Avatar Area (The "Head") */}
-          <div className={cn(
-            "relative w-[75%] h-[75%] rounded-full border-2 border-white/30 overflow-hidden shadow-lg transform -translate-y-1 transition-all duration-300 backdrop-blur-[4px]",
+            "relative w-full h-full rounded-full overflow-hidden shadow-lg transform transition-all duration-300 backdrop-blur-[4px] border-2 border-white/40",
             color === 'red' ? "bg-rose-500/40" :
             color === 'blue' ? "bg-blue-500/40" :
             color === 'yellow' ? "bg-yellow-500/40" :
             "bg-green-500/40",
-            !isLeft && canMove && turn === color ? "scale-110 shadow-2xl brightness-110" : "brightness-100"
+            !isLeft && canMove && turn === color ? "scale-110 shadow-2xl brightness-110 ring-4 ring-white shadow-[0_0_20px_rgba(255,255,255,0.6)] animate-pulse z-10" : "brightness-100"
           )}>
             <img 
               src={avatarUrl} 
@@ -284,9 +278,6 @@ const Piece = ({ color, turn, canMove, onClick, id, size = "w-8 h-8", isLeft, pl
             {/* Gloss overlay */}
             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-white/30 pointer-events-none" />
           </div>
-
-          {/* Ground shadow */}
-          <div className="absolute -bottom-1 w-[80%] h-[15%] bg-black/50 blur-[4px] rounded-full -z-10" />
         </div>
 
         {/* Left/Abandoned Indicator */}
@@ -358,6 +349,7 @@ export const Ludo = ({
   const [isRolling, setIsRolling] = useState(false);
   const [simulatedDiceValue, setSimulatedDiceValue] = useState<number>(1);
   const [winner, setWinner] = useState<LudoColor | null>(null);
+  const matchSavedRef = useRef(false);
   const [playerColor, setPlayerColor] = useState<LudoColor | null>(null);
   const [players, setPlayers] = useState<any[]>([]);
   const [status, setStatus] = useState<'waiting' | 'playing' | 'finished'>(() => {
@@ -390,12 +382,14 @@ export const Ludo = ({
   const [showChat, setShowChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isMoving, setIsMoving] = useState(false);
+  const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [finishedOrder, setFinishedOrder] = useState<LudoColor[]>([]);
   const [accessCode, setAccessCode] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [audioError, setAudioError] = useState(false);
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
   const isInitialChatMount = useRef(true);
+  const localRollingRef = useRef(false);
 
   // Ensure user profile is in the room's participantsProfiles map
   useEffect(() => {
@@ -427,7 +421,8 @@ export const Ludo = ({
   const [isCreator, setIsCreator] = useState(false);
 
   const saveMatch = async (winColor: LudoColor) => {
-    if (!user || isSpectator) return;
+    if (!user || isSpectator || matchSavedRef.current) return;
+    matchSavedRef.current = true;
     
     // Find the current user's player in the game
     const myPlayer = players.find(p => p.uid === user.uid);
@@ -436,13 +431,14 @@ export const Ludo = ({
     const isWinner = winColor === myPlayer.color;
     
     try {
-      let points = isWinner ? 20 : 0;
-      
-      await updateDoc(doc(db, 'users', user.uid), {
-        score: increment(points),
-        [`stats.ludo.wins`]: isWinner ? increment(1) : increment(0),
-        [`stats.ludo.losses`]: !isWinner ? increment(1) : increment(0),
-      });
+      const points = isWinner ? 20 : 0;
+      if (online) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          score: increment(points),
+          [`stats.ludo.wins`]: isWinner ? increment(1) : increment(0),
+          [`stats.ludo.losses`]: !isWinner ? increment(1) : increment(0),
+        });
+      }
 
       // Match Record (Only one player saves in online mode to avoid duplicates)
       if (online) {
@@ -465,8 +461,11 @@ export const Ludo = ({
   };
 
   useEffect(() => {
-    if (winner) {
+    if (winner && !matchSavedRef.current) {
       saveMatch(winner);
+    }
+    if (!winner) {
+      matchSavedRef.current = false;
     }
   }, [winner]);
 
@@ -689,6 +688,23 @@ export const Ludo = ({
     }
   }, [vsCPU, initialPlayerCount]);
 
+  const [recentlyFinishedPieces, setRecentlyFinishedPieces] = useState<Set<string>>(new Set());
+  const [isCentralCelebrating, setIsCentralCelebrating] = useState(false);
+
+  // Prevent accidental refresh/close during active game
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (status === 'playing' && !winner) {
+        e.preventDefault();
+        e.returnValue = ''; // Required for most browsers to show confirmation
+        return '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [status, winner]);
+
   // Turn Timer Countdown
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -722,7 +738,7 @@ export const Ludo = ({
 
   // CPU Turn handler
   useEffect(() => {
-    if (vsCPU && status === 'playing' && !winner) {
+    if (vsCPU && status === 'playing' && !winner && (!online || isCreator)) {
       const currentPlayer = players.find(p => p.color === turn);
       if (currentPlayer?.isBot) {
         const botTimer = setTimeout(async () => {
@@ -747,7 +763,11 @@ export const Ludo = ({
               setTimeout(() => handlePieceClick(bestPiece), 800);
             } else {
               // No legal moves - Wait to let player see the value
-              setTimeout(() => skipTurn(), 1500);
+              setGameMessage("Sem jogadas possíveis!");
+              setTimeout(() => {
+                setGameMessage(null);
+                skipTurn();
+              }, 2500);
             }
           }
         }, 1500);
@@ -757,26 +777,42 @@ export const Ludo = ({
   }, [vsCPU, turn, diceValue, isRolling, status, winner, players, board]);
 
   const rollDiceForBot = async () => {
-    if (isRolling) return;
+    if (isRolling || localRollingRef.current) return;
+    localRollingRef.current = true;
     setIsRolling(true);
     playSound('dice');
-    if (online && roomId && !isSpectator) {
-      await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': true });
-    }
+    try {
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': true, 'gameState.diceValue': null });
+      }
 
-    for (let i = 0; i < 15; i++) {
-       setSimulatedDiceValue(Math.floor(Math.random() * 6) + 1);
-       await new Promise(r => setTimeout(r, 80));
-    }
-    const finalValue = Math.floor(Math.random() * 6) + 1;
-    setDiceValue(finalValue);
-    setSimulatedDiceValue(finalValue);
-    setIsRolling(false);
-    if (online && roomId && !isSpectator) {
-      await updateDoc(doc(db, 'rooms', roomId), { 
-        'gameState.diceValue': finalValue,
-        'gameState.isRolling': false 
-      });
+      for (let i = 0; i < 10; i++) {
+         setSimulatedDiceValue(Math.floor(Math.random() * 6) + 1);
+         await new Promise(r => setTimeout(r, 100));
+      }
+      const finalValue = Math.floor(Math.random() * 6) + 1;
+      setDiceValue(finalValue);
+      setSimulatedDiceValue(finalValue);
+      
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), { 
+          'gameState.diceValue': finalValue,
+          'gameState.isRolling': false 
+        });
+      }
+      
+      // Small delay before allowing snapshot to take over again to avoid race condition
+      setTimeout(() => {
+        localRollingRef.current = false;
+      }, 500);
+    } catch (err) {
+      console.error("Bot roll error:", err);
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': false });
+      }
+      localRollingRef.current = false;
+    } finally {
+      setIsRolling(false);
     }
   };
   // Online listener
@@ -791,8 +827,16 @@ export const Ludo = ({
             const activeColors: LudoColor[] = currentPlayers.length === 2 ? ['red', 'yellow'] : ['red', 'green', 'yellow', 'blue'].slice(0, currentPlayers.length) as LudoColor[];
             setBoard(data.gameState.pieces || createLudoInitialPieces(activeColors));
             setTurn(data.gameState.turn || 'red');
-            setDiceValue(data.gameState.diceValue || null);
-            setIsRolling(data.gameState.isRolling || false);
+            
+            if (!localRollingRef.current) {
+              const serverIsRolling = data.gameState.isRolling || false;
+              const serverDiceValue = data.gameState.diceValue || null;
+              
+              setDiceValue(serverDiceValue);
+              // If we have a value, we shouldn't be rolling. This prevents stale "isRolling: true" snapshots.
+              setIsRolling(serverDiceValue !== null ? false : serverIsRolling);
+            }
+
             setWinner(data.gameState.winner || null);
             setFinishedOrder(data.gameState.finishedOrder || []);
             setStatus(data.status || 'waiting');
@@ -909,13 +953,17 @@ export const Ludo = ({
         setTimeLeft(TURN_TIME);
       } else {
         // Delay skip to let player see the dice before it resets
-        setTimeout(() => skipTurn(), 1000);
+        setGameMessage("Sem jogadas possíveis!");
+        setTimeout(() => {
+          setGameMessage(null);
+          skipTurn();
+        }, 2500);
       }
     }
   };
 
   const rollDice = async () => {
-    if (status !== 'playing' || isRolling || winner || isSpectator || (diceValue !== null)) return;
+    if (status !== 'playing' || isRolling || localRollingRef.current || winner || isSpectator || (diceValue !== null)) return;
     
     // Check if it's the current player's turn (in VS CPU or Online)
     const currentPlayer = players.find(p => p.color === turn);
@@ -927,38 +975,59 @@ export const Ludo = ({
     // In Online, only allow human to roll if it's their assigned color.
     if (online && turn !== playerColor) return;
 
+    localRollingRef.current = true;
     setIsRolling(true);
     playSound('dice');
-    if (online && roomId && !isSpectator) {
-      await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': true, 'gameState.diceValue': null });
-    }
-
-    // Simulate roll animation
-    for (let i = 0; i < 15; i++) {
-       setSimulatedDiceValue(Math.floor(Math.random() * 6) + 1);
-       await new Promise(r => setTimeout(r, 80));
-    }
     
-    const finalValue = Math.floor(Math.random() * 6) + 1;
-    setDiceValue(finalValue);
-    setSimulatedDiceValue(finalValue);
-    setIsRolling(false);
+    let finalValue = 0;
+    try {
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': true, 'gameState.diceValue': null });
+      }
 
-    if (online && roomId && !isSpectator) {
-      await updateDoc(doc(db, 'rooms', roomId), {
-        'gameState.diceValue': finalValue,
-        'gameState.isRolling': false
-      });
+      // Simulate roll animation
+      for (let i = 0; i < 10; i++) {
+         setSimulatedDiceValue(Math.floor(Math.random() * 6) + 1);
+         await new Promise(r => setTimeout(r, 100));
+      }
+      
+      finalValue = Math.floor(Math.random() * 6) + 1;
+      setDiceValue(finalValue);
+      setSimulatedDiceValue(finalValue);
+
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), {
+          'gameState.diceValue': finalValue,
+          'gameState.isRolling': false
+        });
+      }
+
+      // Small delay before allowing snapshot to take over again to avoid race condition
+      setTimeout(() => {
+        localRollingRef.current = false;
+      }, 500);
+    } catch (err) {
+      console.error("Roll error:", err);
+      if (online && roomId && !isSpectator) {
+        await updateDoc(doc(db, 'rooms', roomId), { 'gameState.isRolling': false });
+      }
+      localRollingRef.current = false;
+    } finally {
+      setIsRolling(false);
     }
+
+    if (finalValue === 0) return;
 
     // Check if player has any legal moves
     const currentPieces = board.filter(p => p.color === turn);
     const hasLegalMoves = currentPieces.some(p => canMovePiece(p, finalValue));
 
     if (!hasLegalMoves) {
-       // Wait 1.5s to let the player realize no move is possible
+       setGameMessage("Sem jogadas possíveis!");
+       // Wait enough to let the player realize no move is possible
        if (finalValue === 6) {
          setTimeout(async () => {
+           setGameMessage(null);
            setDiceValue(null);
            setTimeLeft(TURN_TIME);
            if (online && roomId && !isSpectator) {
@@ -966,17 +1035,28 @@ export const Ludo = ({
                'gameState.diceValue': null
              });
            }
-         }, 1500);
+         }, 3000);
        } else {
-         setTimeout(() => skipTurn(), 1500);
+         setTimeout(() => {
+           setGameMessage(null);
+           skipTurn();
+         }, 3000);
        }
     }
   };
 
   const skipTurn = async () => {
     const nextColors: LudoColor[] = players.map(p => p.color);
-    const currentIndex = nextColors.indexOf(turn);
-    const nextTurn = nextColors[(currentIndex + 1) % nextColors.length];
+    let nextIndex = (nextColors.indexOf(turn) + 1) % nextColors.length;
+    
+    // Skip players who finished OR left
+    let attempts = 0;
+    while ((finishedOrder.includes(nextColors[nextIndex]) || players.find(p => p.color === nextColors[nextIndex])?.isLeft) && attempts < nextColors.length) {
+      nextIndex = (nextIndex + 1) % nextColors.length;
+      attempts++;
+    }
+
+    const nextTurn = nextColors[nextIndex];
     
     setDiceValue(null);
     setTurn(nextTurn);
@@ -985,7 +1065,8 @@ export const Ludo = ({
     if (online && roomId && !isSpectator) {
       await updateDoc(doc(db, 'rooms', roomId), {
         'gameState.turn': nextTurn,
-        'gameState.diceValue': null
+        'gameState.diceValue': null,
+        'gameState.isRolling': false
       });
     }
   };
@@ -1080,6 +1161,20 @@ export const Ludo = ({
 
     if (reachedFinish && !playerPieces.every(p => p.position === 'finish')) {
       playSound('finish');
+      
+      // Trigger celebration for 20 seconds
+      setRecentlyFinishedPieces(prev => new Set(prev).add(pieceAfterMove.id));
+      setIsCentralCelebrating(true);
+      setTimeout(() => {
+        setRecentlyFinishedPieces(prev => {
+          const next = new Set(prev);
+          next.delete(pieceAfterMove.id);
+          if (next.size === 0) {
+            setIsCentralCelebrating(false);
+          }
+          return next;
+        });
+      }, 20000);
     }
 
     let newFinishedOrder = [...finishedOrder];
@@ -1150,6 +1245,7 @@ export const Ludo = ({
         'gameState.winner': win,
         'gameState.finishedOrder': newFinishedOrder,
         'gameState.isMoving': false,
+        'gameState.isRolling': false,
         status: (newFinishedOrder.length >= players.length - 1) ? 'finished' : 'playing'
       });
     }
@@ -1228,7 +1324,8 @@ export const Ludo = ({
                       isLeft={pieceOwner?.isLeft}
                       size="w-full h-full"
                       players={players}
-                      isFinished={piece.position === 'finish'}
+                      isFinished={piece.position === 'finish' && recentlyFinishedPieces.has(piece.id)}
+                      isHome={false}
                     />
                   </div>
                  );
@@ -1251,6 +1348,18 @@ export const Ludo = ({
           
           <Dice3D value={isRolling ? simulatedDiceValue : diceValue} rolling={isRolling} color={turn} />
         </div>
+        <AnimatePresence>
+          {gameMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="absolute -top-12 whitespace-nowrap bg-rose-600/90 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg border border-white/20 z-[100]"
+            >
+              {gameMessage}
+            </motion.div>
+          )}
+        </AnimatePresence>
         {!isSpectator && status === 'playing' && turn === playerColor && diceValue === null && !isRolling && (
           <motion.p 
             initial={{ opacity: 0 }} 
@@ -1474,7 +1583,7 @@ export const Ludo = ({
           {/* Audio activation overlay removed - silent unlock on first click */}
         </AnimatePresence>
         
-        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:items-center pb-20">
+        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8 lg:items-center pb-20">
           
           {/* Mobile Status (Above Board) */}
           <div className="lg:hidden w-full px-4 order-1">
@@ -1486,9 +1595,9 @@ export const Ludo = ({
              <div className={cn(
                "relative flex flex-col items-center",
                "sm:bg-white/5 sm:backdrop-blur-md sm:border sm:border-white/10 sm:rounded-2xl sm:shadow-2xl",
-               "p-4 sm:p-6 lg:p-8",
-               "gap-4 sm:gap-8",
-               "w-full sm:w-auto min-w-[120px] sm:min-w-[240px]"
+               "p-2 sm:p-6 lg:p-8",
+               "gap-2 sm:gap-8",
+               "w-full sm:w-auto min-w-[100px] sm:min-w-[240px]"
              )}>
                 {/* Circling Timer SVG Overlay - Visible only on Desktop/Tablet */}
                 {!isRolling && (
@@ -1567,7 +1676,7 @@ export const Ludo = ({
           </div>
 
           {/* Center: Ludo Board */}
-          <div className="lg:col-span-6 flex flex-col items-center gap-8 pt-28 sm:pt-40 lg:pt-20 pb-24 lg:pb-12 order-2 px-0">
+          <div className="lg:col-span-6 flex flex-col items-center gap-8 pt-28 sm:pt-40 lg:pt-20 pb-8 sm:pb-24 lg:pb-12 order-2 px-0">
              
              {/* Lobby Status Message (Above Board) */}
              {online && status === 'waiting' && (
@@ -1906,7 +2015,7 @@ export const Ludo = ({
                     }}
                   >
                      {/* Celebratory Sparkles in Center - Only show when someone has finished or game is over */}
-                     {finishedOrder.length > 0 && (
+                     {isCentralCelebrating && (
                        <div className="absolute inset-0 pointer-events-none overflow-visible">
                           {[1, 2, 3].map((i) => (
                              <motion.div

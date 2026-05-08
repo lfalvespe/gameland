@@ -74,6 +74,7 @@ export const Checkers = ({ online, socket, roomId, friendId, vsCPU, difficulty =
   const [showRules, setShowRules] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isForfeit, setIsForfeit] = useState(false);
+  const matchSavedRef = useRef(false);
   const [timeLeft, setTimeLeft] = useState(15);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
   const [rematchRequested, setRematchRequested] = useState(false);
@@ -457,7 +458,8 @@ export const Checkers = ({ online, socket, roomId, friendId, vsCPU, difficulty =
   }, [board, turn, winner]);
 
   const saveMatch = async (result: string, isForfeit = false) => {
-    if (!user) return;
+    if (!user || matchSavedRef.current) return;
+    matchSavedRef.current = true;
     
     // --- Score Update (Every player updates their own score) ---
     try {
@@ -468,13 +470,13 @@ export const Checkers = ({ online, socket, roomId, friendId, vsCPU, difficulty =
         points = 10;
       }
       
-      if (points > 0) {
+      if (online && points > 0) {
         await updateDoc(doc(db, 'users', user.uid), {
           score: increment(points),
           [`stats.checkers.wins`]: result === playerColor ? increment(1) : increment(0),
           [`stats.checkers.losses`]: (result !== 'Draw' && result !== playerColor) ? increment(1) : increment(0),
         });
-      } else if (result !== 'Draw') {
+      } else if (online && result !== 'Draw') {
         // Even if no points (defeat), update losses
         await updateDoc(doc(db, 'users', user.uid), {
           [`stats.checkers.losses`]: increment(1)
@@ -524,8 +526,11 @@ export const Checkers = ({ online, socket, roomId, friendId, vsCPU, difficulty =
   };
 
   useEffect(() => {
-    if (winner) {
+    if (winner && !matchSavedRef.current) {
       saveMatch(winner, isForfeit);
+    }
+    if (!winner) {
+      matchSavedRef.current = false;
     }
   }, [winner, isForfeit]);
 
@@ -903,7 +908,7 @@ export const Checkers = ({ online, socket, roomId, friendId, vsCPU, difficulty =
       <div className="flex-1 flex flex-col lg:flex-row items-center justify-center p-6 gap-12">
         <div className="flex flex-col items-center gap-8">
           <div className="text-center relative">
-            <h2 className="text-4xl font-black italic uppercase tracking-tighter mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Checkers</h2>
+            <h2 className="text-4xl font-black italic uppercase tracking-tighter mb-2 bg-gradient-to-br from-white to-white/40 bg-clip-text text-transparent">Damas</h2>
             
             <div className="mt-8 sm:mt-12 flex items-center justify-center gap-4 sm:gap-12">
               <div className={cn(

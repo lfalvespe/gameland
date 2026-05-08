@@ -1,30 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Grid3X3, Disc, Trophy, MessageSquare, Users, Plus, Search, Bell, X, User as UserIcon, ShieldAlert, Ban, CheckCircle, UserCheck, Info, HelpCircle, Lock, Key, Eye } from 'lucide-react';
+import { Grid3X3, Disc, Trophy, MessageSquare, Users, Plus, Search, Bell, X, User as UserIcon, ShieldAlert, Ban, CheckCircle, UserCheck, Info, HelpCircle, Lock, Key, Eye, TrendingUp } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useError } from '../ErrorContext';
 import { db, collection, query, where, orderBy, limit, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, OperationType, handleFirestoreError, getDoc, arrayUnion, onSnapshot, increment } from '../firebase';
+import { normalizeString } from '../lib/stringUtils';
 import { cn } from '../lib/utils';
 import { Chat } from './Chat';
 import { TicTacToe } from './TicTacToe';
 import { Checkers } from './Checkers';
 import { Ludo } from './Ludo';
 import { Hangman } from './Hangman';
+import { MatchHistory } from './MatchHistory';
 import type { Difficulty } from './TicTacToe';
 
 const GAME_MAX_PLAYERS: Record<string, number> = {
   'Tic-Tac-Toe': 2,
   'Checkers': 2,
   'Ludo': 4,
-  'Forca': 4
+  'Forca Batalha': 6,
+  'Forca Clássico': 6
 };
 
-const GameCard = ({ title, description, icon: Icon, iconColor, bgColor, onClick, onInfo, comingSoon }: any) => (
+const GameCard = ({ title, description, icon: Icon, image, iconColor, bgColor, onLocal, onCreateRoom, onInfo, comingSoon }: any) => (
   <motion.div 
     whileHover={comingSoon ? {} : "hover"}
     className={cn(
       "relative group overflow-hidden rounded-3xl bg-white/5 border border-white/10 p-8 flex flex-col items-center text-center gap-4 transition-all",
-      comingSoon ? "opacity-60 cursor-not-allowed grayscale" : "cursor-pointer hover:border-white/20"
+      comingSoon ? "opacity-60 cursor-not-allowed grayscale" : "hover:border-white/20"
     )}
     variants={{
       hover: { 
@@ -34,23 +37,43 @@ const GameCard = ({ title, description, icon: Icon, iconColor, bgColor, onClick,
       }
     }}
   >
-    <div onClick={comingSoon ? undefined : onClick} className="absolute inset-0 z-0" />
     <motion.div 
       variants={{
         hover: { rotate: 12, scale: 1.1 }
       }}
-      className={cn("p-6 rounded-2xl transition-colors relative z-10", bgColor)}
-      onClick={comingSoon ? undefined : onClick}
+      className={cn("p-2 rounded-2xl transition-colors relative z-10 w-32 h-32 flex items-center justify-center overflow-hidden shadow-lg", bgColor)}
     >
-      <Icon className={cn("w-12 h-12", iconColor)} />
+      {image ? (
+        <img src={image} alt={title} className="w-full h-full object-contain pointer-events-none" referrerPolicy="no-referrer" />
+      ) : (
+        <Icon className={cn("w-12 h-12", iconColor)} />
+      )}
     </motion.div>
-    <div className="relative z-10" onClick={comingSoon ? undefined : onClick}>
+    <div className="relative z-10">
       <h3 className="text-xl font-bold mb-2 flex items-center gap-2 justify-center">
         {title}
         {comingSoon && <span className="text-[10px] font-black bg-blue-500 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter">Soon</span>}
       </h3>
-      <p className="text-sm opacity-60">{description}</p>
+      <p className="text-sm opacity-60 line-clamp-2">{description}</p>
     </div>
+
+    {!comingSoon && (
+      <div className="flex items-center gap-2 w-full mt-2 relative z-20">
+        <button 
+          onClick={onLocal}
+          className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+        >
+          Local
+        </button>
+        <button 
+          onClick={onCreateRoom}
+          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
+        >
+          Criar Sala
+        </button>
+      </div>
+    )}
+
     {onInfo && !comingSoon && (
       <button 
         onClick={(e) => { e.stopPropagation(); onInfo(); }}
@@ -67,6 +90,79 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
   const { user, profile } = useAuth();
   const { showError } = useError();
   const [searchQuery, setSearchQuery] = useState('');
+
+  const games = [
+    { 
+      id: 'Tic-Tac-Toe', 
+      title: 'Jogo da Velha',
+      description: 'A clássica batalha de X contra O. Jogue contra amigos ou IA.',
+      image: '/icons/tic-tac-toe.png',
+      icon: Grid3X3, 
+      color: 'text-blue-400', 
+      bg: 'bg-blue-500/10',
+      longDescription: 'Domine a grade neste jogo de estratégia atemporal. Desafie o computador ou convide um amigo para testar sua inteligência em partidas em tempo real.'
+    },
+    { 
+      id: 'Checkers', 
+      title: 'Damas',
+      description: 'Jogo de tabuleiro clássico de estratégia e habilidade.',
+      image: '/icons/checkers.png',
+      icon: Disc, 
+      color: 'text-rose-400', 
+      bg: 'bg-rose-500/10',
+      longDescription: 'Pule, capture e coroe suas peças rumo à vitória. Uma experiência tática profunda que diverte há séculos, agora reimaginada no GameLand.'
+    },
+    { 
+      id: 'Ludo', 
+      title: 'Ludo',
+      description: 'Leve suas peças para casa nesta corrida pela vitória.',
+      image: '/icons/ludo.png',
+      icon: Trophy, 
+      color: 'text-yellow-400', 
+      bg: 'bg-yellow-500/10',
+      longDescription: 'Um favorito da família que combina sorte e estratégia. Jogue os dados, mova suas peças e seja o primeiro a levar as quatro peças para casa.'
+    },
+    { 
+      id: 'Hangman', 
+      title: 'Forca Batalha',
+      description: 'Adivinhe a palavra secreta antes de ser enforcado.',
+      image: '/icons/forca-battle.png',
+      icon: Users, 
+      color: 'text-purple-400', 
+      bg: 'bg-purple-500/10',
+      longDescription: 'Teste seu vocabulário neste clássico jogo de palavras. Uma palavra secreta, poucas chances. Você consegue adivinhar?'
+    },
+    { 
+      id: 'Snakes-Ladders', 
+      title: 'Cobras e Escadas',
+      description: 'Suba as escadas e fuja das cobras!',
+      image: '/icons/snakes-and-ladders.png',
+      icon: Trophy, 
+      color: 'text-emerald-400', 
+      bg: 'bg-emerald-500/10',
+      comingSoon: true,
+      longDescription: 'O clássico Snakes and Ladders está chegando! Uma corrida emocionante onde a sorte nos dados decide se você sobe ao topo ou escorrega pro início.'
+    },
+    { 
+      id: 'Hangman-Classic', 
+      title: 'Forca Clássico',
+      description: 'Adivinhe a palavra secreta na versão clássica.',
+      image: '/icons/forca-classic.png',
+      icon: Users, 
+      color: 'text-amber-400', 
+      bg: 'bg-amber-500/10',
+      longDescription: 'A versão clássica da Forca! Jogue sozinho ou desafie amigos para ver quem adivinha a palavra secreta primeiro. Diversos temas e dificuldades!'
+    },
+  ];
+
+  const [currentFeaturedIndex, setCurrentFeaturedIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentFeaturedIndex((prev) => (prev + 1) % games.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [games.length]);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -74,6 +170,9 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
   const [userToToggleBan, setUserToToggleBan] = useState<any | null>(null);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
   const [privateChatPreviews, setPrivateChatPreviews] = useState<Record<string, any>>({});
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showModerationUsers, setShowModerationUsers] = useState(false);
+  const [resetInput, setResetInput] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -137,24 +236,136 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
     }
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
+  const resetAllMatchData = async () => {
+    if (resetInput !== 'RESET') {
+       setInviteStatus("Error: You must type 'RESET' exactly.");
+       setTimeout(() => setInviteStatus(null), 3000);
+       return;
+    }
+
+    setShowResetConfirm(false);
+    setResetInput('');
+    setLoadingUsers(true);
     try {
+      // 1. Delete all matches from the shared history
+      const matchesSnap = await getDocs(collection(db, 'matches'));
+      const deleteMatchPromises = matchesSnap.docs.map(d => deleteDoc(doc(db, 'matches', d.id)));
+      await Promise.all(deleteMatchPromises);
+
+      // 2. Reset all users (score and stats)
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const initialStats = {
+        ticTacToe: { wins: 0, losses: 0, draws: 0 },
+        checkers: { wins: 0, losses: 0, draws: 0 },
+        ludo: { wins: 0, losses: 0 },
+        hangman: { wins: 0, losses: 0, draws: 0, total: 0, totalMistakes: 0, themesPlayed: {} },
+        snakesLadders: { wins: 0, losses: 0 }
+      };
+
+      const userResetPromises = usersSnap.docs.map(d => updateDoc(doc(db, 'users', d.id), {
+        score: 0,
+        stats: initialStats
+      }));
+      await Promise.all(userResetPromises);
+
+      // 3. Clear hangman sessions (active or old)
+      const hangmanMatchesSnap = await getDocs(collection(db, 'hangman_matches'));
+      const hangmanDeletePromises = hangmanMatchesSnap.docs.map(d => deleteDoc(doc(db, 'hangman_matches', d.id)));
+      await Promise.all(hangmanDeletePromises);
+
+      // 4. Clear rooms
+      const roomsSnap = await getDocs(collection(db, 'rooms'));
+      const deleteRoomsPromises = roomsSnap.docs.map(d => deleteDoc(doc(db, 'rooms', d.id)));
+      await Promise.all(deleteRoomsPromises);
+
+      // 5. Clear messages
+      const messagesSnap = await getDocs(collection(db, 'messages'));
+      const deleteMessagesPromises = messagesSnap.docs.map(d => deleteDoc(doc(db, 'messages', d.id)));
+      await Promise.all(deleteMessagesPromises);
+
+      setInviteStatus("MASTER RESET COMPLETE: All history, rooms, and messages wiped.");
+      setTimeout(() => setInviteStatus(null), 5000);
+      
+      // Refresh user list to show 0 scores
+      const q = query(collection(db, 'users'), orderBy('displayName', 'asc'), limit(50));
+      const snap = await getDocs(q);
+      setAllUsers(snap.docs.map(d => ({ uid: d.id, ...d.data() })));
+    } catch (error) {
+      console.error("Master Reset error:", error);
+      handleFirestoreError(error, OperationType.UPDATE, 'system/master_reset', showError);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        performSearch(searchQuery);
+      } else {
+        setSearchResults([]);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const performSearch = async (queryStr: string) => {
+    setIsSearching(true);
+    const normalizedQuery = normalizeString(queryStr);
+    try {
+      // 1. Try search by normalized name (covers case and accents)
       const q = query(
         collection(db, 'users'),
-        where('displayName', '>=', searchQuery),
-        where('displayName', '<=', searchQuery + '\uf8ff'),
-        limit(5)
+        where('displayName_normalized', '>=', normalizedQuery),
+        where('displayName_normalized', '<=', normalizedQuery + '\uf8ff'),
+        limit(10)
       );
       const snap = await getDocs(q);
-      setSearchResults(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.uid !== user?.uid));
+      let results = snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.uid !== user?.uid);
+      
+      // 2. If no results, try search by email (exact match or prefix)
+      if (results.length < 3) {
+        const qEmail = query(
+          collection(db, 'users'),
+          where('email', '>=', queryStr.toLowerCase()),
+          where('email', '<=', queryStr.toLowerCase() + '\uf8ff'),
+          limit(5)
+        );
+        const snapEmail = await getDocs(qEmail);
+        const emailResults = snapEmail.docs
+          .map(d => ({ uid: d.id, ...d.data() }))
+          .filter(u => u.uid !== user?.uid && !results.some(r => r.uid === u.uid));
+        results = [...results, ...emailResults];
+      }
+
+      // 3. Last fallback: Try case-sensitive original name if normalized results are still low
+      if (results.length === 0) {
+        const qFallback = query(
+          collection(db, 'users'),
+          where('displayName', '>=', queryStr),
+          where('displayName', '<=', queryStr + '\uf8ff'),
+          limit(5)
+        );
+        const snapFallback = await getDocs(qFallback);
+        const fallbackResults = snapFallback.docs
+          .map(d => ({ uid: d.id, ...d.data() }))
+          .filter(u => u.uid !== user?.uid && !results.some(r => r.uid === u.uid));
+        results = [...results, ...fallbackResults];
+      }
+
+      setSearchResults(results);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'users/search', showError);
+      console.error("Search error:", error);
+      // Silently fail or handle error - sometimes indexes are missing
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    performSearch(searchQuery);
   };
 
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -188,10 +399,12 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         status: 'waiting'
       });
 
-      if (newRoomGameType === 'Forca') {
+      if (newRoomGameType === 'Forca Batalha' || newRoomGameType === 'Forca Clássico') {
+        const variant = newRoomGameType === 'Forca Clássico' ? 'classic' : 'battle';
         await setDoc(doc(db, 'hangman_matches', roomId), {
           players: [user.uid],
           status: 'setup',
+          variant,
           playerData: {},
           scores: {},
           currentRound: 0,
@@ -206,7 +419,8 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         'Tic-Tac-Toe': 'tictactoe_online',
         'Checkers': 'checkers_online',
         'Ludo': 'ludo_online',
-        'Forca': 'hangman_online'
+        'Forca Batalha': 'hangman_online',
+        'Forca Clássico': 'hangman_classic_online'
       };
       setActiveGame(gameMap[newRoomGameType] || 'tictactoe_online');
       setShowCreateRoom(false);
@@ -234,7 +448,8 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         'Tic-Tac-Toe': 'tictactoe_online',
         'Checkers': 'checkers_online',
         'Ludo': 'ludo_online',
-        'Forca': 'hangman_online'
+        'Forca Batalha': 'hangman_online',
+        'Forca Clássico': 'hangman_classic_online'
       };
 
       const maxPlayers = GAME_MAX_PLAYERS[room.gameType] || 2;
@@ -268,7 +483,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
       // Ludo always starts in waiting state until creator starts it
       const nextStatus = room.gameType === 'Ludo' ? 'waiting' : (willBeFull ? 'playing' : 'waiting');
 
-      if (room.gameType === 'Forca') {
+      if (room.gameType === 'Forca Batalha' || room.gameType === 'Forca Clássico') {
         try {
           await updateDoc(doc(db, 'hangman_matches', room.id), {
             players: arrayUnion(user.uid),
@@ -308,7 +523,8 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         'Tic-Tac-Toe': 'tictactoe_online',
         'Checkers': 'checkers_online',
         'Ludo': 'ludo_online',
-        'Forca': 'hangman_online'
+        'Forca Batalha': 'hangman_online',
+        'Forca Clássico': 'hangman_classic_online'
       };
 
       const maxPlayers = GAME_MAX_PLAYERS[joiningRoom.gameType] || 2;
@@ -325,7 +541,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         // Ludo always starts in waiting state until creator starts it
         const nextStatus = joiningRoom.gameType === 'Ludo' ? 'waiting' : (willBeFull ? 'playing' : 'waiting');
 
-        if (joiningRoom.gameType === 'Forca') {
+        if (joiningRoom.gameType === 'Forca Batalha' || joiningRoom.gameType === 'Forca Clássico') {
           try {
             await updateDoc(doc(db, 'hangman_matches', joiningRoom.id), {
               players: arrayUnion(user.uid),
@@ -362,10 +578,11 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
   const getBestGame = () => {
     const stats = profile?.stats || {};
     const games = [
-      { id: 'Tic-Tac-Toe', wins: stats.ticTacToe?.wins || 0, icon: Grid3X3, color: 'text-blue-400', bg: 'bg-blue-400/10' },
-      { id: 'Checkers', wins: stats.checkers?.wins || 0, icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' },
-      { id: 'Ludo', wins: stats.ludo?.wins || 0, icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
-      { id: 'Hangman', wins: stats.hangman?.wins || 0, icon: Users, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+      { id: 'Tic-Tac-Toe', wins: stats.ticTacToe?.wins || 0, image: '/icons/tic-tac-toe.png', icon: Grid3X3, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+      { id: 'Checkers', wins: stats.checkers?.wins || 0, image: '/icons/checkers.png', icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' },
+      { id: 'Ludo', wins: stats.ludo?.wins || 0, image: '/icons/ludo.png', icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
+      { id: 'Hangman', wins: stats.hangman?.wins || 0, image: '/icons/forca-battle.png', icon: Users, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+      { id: 'Snakes-Ladders', wins: stats.snakesLadders?.wins || 0, image: '/icons/snakes-and-ladders.png', icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
     ];
     
     const sorted = [...games].sort((a, b) => b.wins - a.wins);
@@ -380,22 +597,32 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
       { 
         id: 'Tic-Tac-Toe', 
         total: (stats.ticTacToe?.wins || 0) + (stats.ticTacToe?.losses || 0) + (stats.ticTacToe?.draws || 0), 
+        image: '/icons/tic-tac-toe.png',
         icon: Grid3X3, color: 'text-purple-400', bg: 'bg-purple-400/10' 
       },
       { 
         id: 'Checkers', 
         total: (stats.checkers?.wins || 0) + (stats.checkers?.losses || 0) + (stats.checkers?.draws || 0), 
-        icon: Disc, color: 'text-rose-400', bg: 'bg-rose-400/10' 
+        image: '/icons/checkers.png',
+        icon: Disc, color: 'text-rose-400', bg: 'bg-rose-500/10' 
       },
       { 
         id: 'Ludo', 
         total: (stats.ludo?.wins || 0) + (stats.ludo?.losses || 0) + (stats.ludo?.draws || 0), 
-        icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-400/10' 
+        image: '/icons/ludo.png',
+        icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-500/10' 
       },
       { 
         id: 'Hangman', 
         total: (stats.hangman?.wins || 0) + (stats.hangman?.losses || 0) + (stats.hangman?.draws || 0) + (stats.hangman?.total || 0), 
+        image: '/icons/forca-battle.png',
         icon: Users, color: 'text-blue-400', bg: 'bg-blue-400/10' 
+      },
+      { 
+        id: 'Snakes-Ladders', 
+        total: (stats.snakesLadders?.wins || 0) + (stats.snakesLadders?.losses || 0), 
+        image: '/icons/snakes-and-ladders.png',
+        icon: Trophy, color: 'text-emerald-400', bg: 'bg-emerald-400/10' 
       },
     ];
     
@@ -640,9 +867,11 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
   if (activeGame === 'ludo_online') return <Ludo online socket={socket} roomId={activeRoom.id} isSpectator={activeRoom.isSpectator} onBack={() => { setActiveGame(null); setActiveRoom({ id: 'global', name: 'Global Chat', isPrivate: false }); }} />;
   if (activeGame === 'hangman_local') return <Hangman mode="local" onClose={() => { setActiveGame(null); setActiveRoom({ id: 'global', name: 'Global Chat', isPrivate: false }); }} />;
   if (activeGame === 'hangman_online') return <Hangman mode="online" matchId={activeRoom.id} opponentId={activeRoom.friendId} onClose={() => { setActiveGame(null); setActiveRoom({ id: 'global', name: 'Global Chat', isPrivate: false }); }} />;
+  if (activeGame === 'hangman_classic_local') return <Hangman mode="local" variant="classic" onClose={() => { setActiveGame(null); setActiveRoom({ id: 'global', name: 'Global Chat', isPrivate: false }); }} />;
+  if (activeGame === 'hangman_classic_online') return <Hangman mode="online" variant="classic" matchId={activeRoom.id} opponentId={activeRoom.friendId} onClose={() => { setActiveGame(null); setActiveRoom({ id: 'global', name: 'Global Chat', isPrivate: false }); }} />;
 
   return (
-    <div className="pt-20 sm:pt-24 px-4 sm:px-6 pb-12 max-w-7xl mx-auto relative">
+    <div className="pt-20 sm:pt-36 px-4 sm:px-6 pb-12 max-w-7xl mx-auto relative cursor-default">
       <AnimatePresence>
         {showDifficultySelect && (
           <motion.div 
@@ -659,8 +888,10 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
               <div className="inline-flex p-4 rounded-3xl bg-blue-500/10 mb-6">
                 {difficultyGame === 'Tic-Tac-Toe' ? (
                   <Grid3X3 className="w-12 h-12 text-blue-400" />
-                ) : (
+                ) : difficultyGame === 'Checkers' ? (
                   <Disc className="w-12 h-12 text-rose-400" />
+                ) : (
+                  <Trophy className="w-12 h-12 text-yellow-400" />
                 )}
               </div>
               <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-2">Select Difficulty</h2>
@@ -720,16 +951,107 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
         )}
       </AnimatePresence>
 
+      <section className="mb-12 relative h-[300px] sm:h-[450px] overflow-hidden rounded-[32px] sm:rounded-[40px] border border-white/10 bg-slate-900 shadow-2xl">
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={games[currentFeaturedIndex].id}
+            initial={{ opacity: 0, scale: 1.05 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="absolute inset-0 flex flex-col justify-center sm:justify-end p-5 sm:p-16"
+          >
+            {/* Background Gradients */}
+            <div className={cn("absolute inset-0 opacity-20 transition-all duration-1000", games[currentFeaturedIndex].bg.replace('/10', '/30'))} />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+            
+            <div className="relative z-10 max-w-2xl">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="flex items-center gap-3 mb-2 sm:mb-4"
+              >
+                <div className={cn("p-2 sm:p-3 rounded-xl sm:rounded-2xl text-white", games[currentFeaturedIndex].bg)}>
+                  {React.createElement(games[currentFeaturedIndex].icon, { className: cn("w-5 h-5 sm:w-6 sm:h-6", games[currentFeaturedIndex].color) })}
+                </div>
+                <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-blue-400 uppercase">Jogo em Destaque</span>
+              </motion.div>
+              
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-3xl sm:text-7xl font-black italic uppercase tracking-tighter mb-2 sm:mb-4 text-white drop-shadow-xl"
+              >
+                {games[currentFeaturedIndex].title}
+              </motion.h1>
+              
+              <motion.p 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="text-xs sm:text-lg text-white/60 mb-4 sm:mb-8 max-w-lg leading-relaxed font-medium line-clamp-2 sm:line-clamp-none"
+              >
+                {games[currentFeaturedIndex].longDescription}
+              </motion.p>
+              
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="flex flex-wrap items-center gap-3 sm:gap-4"
+              >
+                <button 
+                  onClick={() => {
+                    const game = games[currentFeaturedIndex];
+                    if (game.id === 'Tic-Tac-Toe' || game.id === 'Checkers' || game.id === 'Ludo') {
+                      setDifficultyGame(game.id);
+                      setShowDifficultySelect(true);
+                    } else if (game.id === 'Hangman') {
+                      setActiveGame('hangman_local');
+                    }
+                  }}
+                  className="px-6 sm:px-8 py-3 sm:py-4 bg-white text-black rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:scale-105 active:scale-95 transition-all shadow-xl shadow-white/10"
+                >
+                  Jogar Agora
+                </button>
+                <button 
+                  onClick={() => setShowRulesFor(games[currentFeaturedIndex].id === 'Hangman' ? 'Forca' : games[currentFeaturedIndex].id)}
+                  className="px-6 sm:px-8 py-3 sm:py-4 bg-white/5 text-white border border-white/10 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-white/10 transition-all active:scale-95"
+                >
+                  Ver Regras
+                </button>
+              </motion.div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Carousel Indicators */}
+        <div className="absolute bottom-4 sm:bottom-8 right-1/2 translate-x-1/2 sm:right-16 sm:translate-x-0 z-20 flex gap-2">
+          {games.map((_, idx) => (
+            <button 
+              key={idx}
+              onClick={() => setCurrentFeaturedIndex(idx)}
+              className={cn(
+                "h-1.5 rounded-full transition-all duration-300",
+                currentFeaturedIndex === idx ? "w-8 bg-white" : "w-2 bg-white/20 hover:bg-white/40"
+              )}
+            />
+          ))}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Left Column: Games */}
       <div className="lg:col-span-8 space-y-8">
         <section>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter">Available Games</h2>
+              <h2 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter">Biblioteca</h2>
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 text-[10px] font-black border border-blue-500/20 animate-pulse">
                 <div className="w-1 h-1 bg-blue-400 rounded-full" />
-                LIVE
+                {games.length} Jogos
               </span>
             </div>
             <button 
@@ -737,58 +1059,43 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-blue-600 text-white text-xs font-black tracking-widest hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
             >
               <Plus className="w-4 h-4" />
-              CREATE ROOM
+              CRIAR SALA
             </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <GameCard 
-              title="Tic-Tac-Toe" 
-              description="Play against the CPU or a friend locally."
-              icon={Grid3X3}
-              iconColor="text-blue-400"
-              bgColor="bg-blue-500/10"
-              onClick={() => {
-                setDifficultyGame('Tic-Tac-Toe');
-                setShowDifficultySelect(true);
-              }}
-              onInfo={() => setShowRulesFor('Tic-Tac-Toe')}
-            />
-            <GameCard 
-              title="Checkers" 
-              description="Play against the CPU or invite friends."
-              icon={Disc}
-              iconColor="text-rose-400"
-              bgColor="bg-rose-500/10"
-              onClick={() => {
-                setDifficultyGame('Checkers');
-                setShowDifficultySelect(true);
-              }}
-              onInfo={() => setShowRulesFor('Checkers')}
-            />
-            <GameCard 
-              title="Ludo" 
-              description="Classic board game for up to 4 players."
-              icon={Trophy}
-              iconColor="text-yellow-400"
-              bgColor="bg-yellow-500/10"
-              onClick={() => {
-                setDifficultyGame('Ludo');
-                setShowDifficultySelect(true);
-              }}
-              onInfo={() => setShowRulesFor('Ludo')}
-            />
-            <GameCard 
-              title="Forca" 
-              description="Adivinhe a palavra secreta antes de ser enforcado."
-              icon={Users}
-              iconColor="text-purple-400"
-              bgColor="bg-purple-500/10"
-              onClick={() => {
-                setActiveGame('hangman_local');
-              }}
-              onInfo={() => setShowRulesFor('Forca')}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            {games.map((game) => (
+              <GameCard 
+                key={game.id}
+                title={game.title} 
+                description={game.description}
+                image={game.image}
+                icon={game.icon}
+                iconColor={game.color}
+                bgColor={game.bg}
+                comingSoon={game.comingSoon}
+                onLocal={() => {
+                  if (game.id === 'Hangman') { 
+                    setActiveGame('hangman_local'); 
+                    return; 
+                  }
+                  if (game.id === 'Hangman-Classic') {
+                    setActiveGame('hangman_classic_local');
+                    return;
+                  }
+                  if (game.id === 'Snakes-Ladders') {
+                    return;
+                  }
+                  setDifficultyGame(game.id as any);
+                  setShowDifficultySelect(true);
+                }}
+                onCreateRoom={() => {
+                  setNewRoomGameType(game.title);
+                  setShowCreateRoom(true);
+                }}
+                onInfo={() => setShowRulesFor(game.id === 'Hangman' ? 'Forca' : game.id)}
+              />
+            ))}
           </div>
         </section>
 
@@ -796,15 +1103,15 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <MessageSquare className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
-              <h2 className="text-xl sm:text-2xl font-bold">Open Rooms</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">Salas Abertas</h2>
             </div>
-            <span className="text-[10px] sm:text-xs font-mono opacity-40">{openRooms.length} ACTIVE</span>
+            <span className="text-[10px] sm:text-xs font-mono opacity-40">{openRooms.length} ATIVAS</span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             {openRooms.filter((r: any) => (r.participantCount || 0) > 0).length === 0 && (
               <div className="col-span-full py-12 text-center opacity-30 border-2 border-dashed border-white/5 rounded-3xl">
-                <p className="text-sm italic">No open rooms available. Create one!</p>
+                <p className="text-sm italic">Nenhuma sala aberta disponível. Crie uma!</p>
               </div>
             )}
             {openRooms.filter((r: any) => (r.participantCount || 0) > 0).map((room: any) => {
@@ -820,10 +1127,10 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                     <h4 className="font-bold text-base sm:text-lg mb-1 truncate">{room.name}</h4>
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] sm:text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 font-bold whitespace-nowrap flex items-center gap-1">
-                          {room.gameType}
+                          {room.gameType === 'Tic-Tac-Toe' ? 'Jogo da Velha' : room.gameType}
                           {room.type === 'private' && <Lock className="w-2.5 h-2.5" />}
                         </span>
-                        <span className="text-[9px] sm:text-[10px] opacity-40 truncate">by {room.creatorName}</span>
+                        <span className="text-[9px] sm:text-[10px] opacity-40 truncate">por {room.creatorName}</span>
                         {isPlaying && (
                           <span className="text-[8px] font-black bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-md uppercase tracking-tighter animate-pulse">Live</span>
                         )}
@@ -838,7 +1145,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                         onClick={() => joinRoom(room)}
                         className="px-4 sm:px-6 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all active:scale-95 whitespace-nowrap bg-white/10 hover:bg-white/20 text-white"
                       >
-                        RE-ENTER
+                        REENTRAR
                       </button>
                     ) : (
                       canJoin ? (
@@ -846,7 +1153,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                           onClick={() => joinRoom(room)}
                           className="px-4 sm:px-6 py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-blue-600 hover:bg-blue-700 transition-all active:scale-95 whitespace-nowrap"
                         >
-                          JOIN
+                          ENTRAR
                         </button>
                       ) : (
                         <button 
@@ -854,7 +1161,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                           className="px-4 sm:px-6 py-2 rounded-xl text-[10px] sm:text-xs font-bold bg-purple-600 hover:bg-purple-700 transition-all active:scale-95 whitespace-nowrap flex items-center gap-2"
                         >
                           <Eye className="w-4 h-4" />
-                          SPECTATE
+                          ASSISTIR
                         </button>
                       )
                     )}
@@ -934,17 +1241,25 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
             <div className="mt-8 pt-8 border-t border-white/10">
               <div className="bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent rounded-[32px] p-6 sm:p-8 border border-white/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity duration-700">
-                  <bestGame.icon className="w-32 h-32 rotate-12" />
+                  {bestGame.image ? (
+                    <img src={bestGame.image} alt={bestGame.id} className="w-48 h-48 object-contain rotate-12" referrerPolicy="no-referrer" />
+                  ) : (
+                    <bestGame.icon className="w-32 h-32 rotate-12" />
+                  )}
                 </div>
                 <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
-                  <div className={cn("p-5 rounded-[24px] shadow-2xl", bestGame.bg)}>
-                    <bestGame.icon className={cn("w-10 h-10", bestGame.color)} />
+                  <div className={cn("p-2 rounded-[24px] shadow-2xl flex items-center justify-center w-20 h-20 overflow-hidden", bestGame.bg)}>
+                    {bestGame.image ? (
+                      <img src={bestGame.image} alt={bestGame.id} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    ) : (
+                      <bestGame.icon className={cn("w-10 h-10", bestGame.color)} />
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-blue-400 mb-1">Your Personal Best</h4>
-                    <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">Better in {bestGame.id}</h3>
+                    <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-blue-400 mb-1">Seu Melhor Desempenho</h4>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">Melhor em {bestGame.id === 'Hangman' ? 'Forca Batalha' : bestGame.id === 'Snakes-Ladders' ? 'Cobras e Escadas' : bestGame.id}</h3>
                     <p className="text-sm opacity-50 font-medium leading-relaxed max-w-sm">
-                      You've conquered {bestGame.wins} matches in this category. Keep the streak alive!
+                      Você conquistou {bestGame.wins} vitórias nesta categoria. Continue assim!
                     </p>
                   </div>
                   <button 
@@ -957,7 +1272,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                     }}
                     className="px-6 py-3 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all shadow-xl shadow-white/10"
                   >
-                    Play Again
+                    Jogar Novamente
                   </button>
                 </div>
               </div>
@@ -968,17 +1283,25 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
             <div className={cn("mt-4", !bestGame && "mt-8 pt-8 border-t border-white/10")}>
               <div className="bg-gradient-to-br from-purple-600/10 via-blue-600/5 to-transparent rounded-[32px] p-6 sm:p-8 border border-white/5 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity duration-700">
-                  <mostPlayed.icon className="w-32 h-32 rotate-12" />
+                  {mostPlayed.image ? (
+                    <img src={mostPlayed.image} alt={mostPlayed.id} className="w-48 h-48 object-contain rotate-12" referrerPolicy="no-referrer" />
+                  ) : (
+                    <mostPlayed.icon className="w-32 h-32 rotate-12" />
+                  )}
                 </div>
                 <div className="relative z-10 flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
-                  <div className={cn("p-5 rounded-[24px] shadow-2xl", mostPlayed.bg)}>
-                    <mostPlayed.icon className={cn("w-10 h-10", mostPlayed.color)} />
+                  <div className={cn("p-2 rounded-[24px] shadow-2xl flex items-center justify-center w-20 h-20 overflow-hidden", mostPlayed.bg)}>
+                    {mostPlayed.image ? (
+                      <img src={mostPlayed.image} alt={mostPlayed.id} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    ) : (
+                      <mostPlayed.icon className={cn("w-10 h-10", mostPlayed.color)} />
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-purple-400 mb-1">Most Played Game</h4>
-                    <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">{mostPlayed.id} Master</h3>
+                    <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-purple-400 mb-1">Jogo Mais Jogado</h4>
+                    <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">Mestre em {mostPlayed.id === 'Hangman' ? 'Forca Batalha' : mostPlayed.id === 'Snakes-Ladders' ? 'Cobras e Escadas' : mostPlayed.id}</h3>
                     <p className="text-sm opacity-50 font-medium leading-relaxed max-w-sm">
-                      You've entered the arena {mostPlayed.total} times. Your dedication is legendary!
+                      Você entrou na arena {mostPlayed.total} vezes. Sua dedicação é lendária!
                     </p>
                   </div>
                   <button 
@@ -991,7 +1314,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                     }}
                     className="px-6 py-3 bg-white/10 text-white border border-white/10 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white hover:text-black transition-all shadow-xl"
                   >
-                    Enter Arena
+                    Entrar na Arena
                   </button>
                 </div>
               </div>
@@ -999,79 +1322,155 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
           )}
         </section>
 
+        <MatchHistory />
+
         {(profile?.role === 'admin' || profile?.role === 'moderator') && (
           <section className="bg-white/5 rounded-3xl border border-white/10 p-4 sm:p-8">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6 text-rose-500" />
-                <h2 className="text-xl sm:text-2xl font-bold">Moderation Panel</h2>
+                <h2 className="text-xl sm:text-2xl font-bold">Painel de Moderação</h2>
+                <button 
+                  onClick={() => setShowModerationUsers(!showModerationUsers)}
+                  className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all group"
+                  title={showModerationUsers ? "Ocultar Usuários" : "Mostrar Usuários"}
+                >
+                  <Eye className={cn("w-4 h-4 transition-colors", showModerationUsers ? "text-rose-500" : "opacity-40 group-hover:opacity-100")} />
+                </button>
               </div>
-              <span className="text-[9px] sm:text-[10px] font-black bg-rose-500/10 text-rose-500 px-2 sm:px-3 py-1 rounded-full border border-rose-500/20 whitespace-nowrap">
-                ADMIN ONLY
-              </span>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-rose-600/20"
+                >
+                  Resetar Todos os Dados
+                </button>
+                <span className="text-[9px] sm:text-[10px] font-black bg-rose-500/10 text-rose-500 px-2 sm:px-3 py-1 rounded-full border border-rose-500/20 whitespace-nowrap">
+                  SOMENTE ADMIN
+                </span>
+              </div>
             </div>
             
-            <div className="space-y-3 sm:space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {loadingUsers ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/5 animate-pulse">
-                    <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/10 flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-white/10 rounded w-1/2" />
-                        <div className="h-3 bg-white/5 rounded w-1/3" />
-                      </div>
-                    </div>
-                    <div className="w-20 h-8 bg-white/10 rounded-xl" />
-                  </div>
-                ))
-              ) : (
-                allUsers.map((u) => (
-                  <div key={u.uid} className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/5 group hover:border-rose-500/30 transition-all gap-3">
-                    <div 
-                      className="flex items-center gap-3 sm:gap-4 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => onViewUserProfile(u.uid)}
-                    >
-                      <div className="relative flex-shrink-0">
-                        <img 
-                          src={u.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.uid}`} 
-                          className={cn("w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/10", u.banned && "grayscale opacity-50")}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                        />
-                        {u.online && <div className="absolute bottom-0 right-0 w-2 sm:w-2.5 h-2 sm:h-2.5 bg-green-500 border-2 border-slate-900 rounded-full" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <p className={cn("font-bold text-sm sm:text-base truncate", u.banned && "line-through opacity-50")}>{u.displayName}</p>
-                          {u.role === 'admin' && <span className="text-[7px] sm:text-[8px] font-black bg-rose-500 text-white px-1 sm:px-1.5 py-0.5 rounded uppercase tracking-tighter flex-shrink-0">Admin</span>}
-                          {u.banned && <span className="text-[7px] sm:text-[8px] font-black bg-black text-rose-500 px-1 sm:px-1.5 py-0.5 rounded uppercase tracking-tighter border border-rose-500/50 flex-shrink-0">Banned</span>}
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] opacity-40 truncate">{u.email}</p>
+            <AnimatePresence>
+              {showResetConfirm && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-6 p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 overflow-hidden"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start gap-3 text-rose-500">
+                      <ShieldAlert className="w-6 h-6 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold uppercase tracking-tight">Nuclear Option Warning</p>
+                        <p className="text-xs opacity-70 mt-1">
+                          This will permanently delete all match history and reset every single player's score and statistics to zero. 
+                          This action is irreversible.
+                        </p>
                       </div>
                     </div>
                     
-                    {u.uid !== user?.uid && u.role !== 'admin' && (
-                      <button 
-                        onClick={() => setUserToToggleBan(u)}
-                        className={cn(
-                          "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex-shrink-0",
-                          u.banned 
-                            ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" 
-                            : "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
-                        )}
-                      >
-                        {u.banned ? (
-                          <><CheckCircle className="w-3 h-3" /> <span className="hidden min-[400px]:inline">Unban</span></>
-                        ) : (
-                          <><Ban className="w-3 h-3" /> <span className="hidden min-[400px]:inline">Ban User</span><span className="min-[400px]:hidden">Ban</span></>
-                        )}
-                      </button>
-                    )}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase opacity-60">Type RESET to confirm</p>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={resetInput}
+                          onChange={(e) => setResetInput(e.target.value)}
+                          placeholder="Type RESET"
+                          className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-rose-500/50"
+                        />
+                        <button 
+                          onClick={resetAllMatchData}
+                          disabled={resetInput !== 'RESET'}
+                          className="px-6 py-2 bg-rose-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                        >
+                          PROCEED
+                        </button>
+                        <button 
+                          onClick={() => { setShowResetConfirm(false); setResetInput(''); }}
+                          className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+                        >
+                          CANCEL
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                ))
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
+            
+            <AnimatePresence>
+              {showModerationUsers && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-3 sm:space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar mt-4"
+                >
+                  {loadingUsers ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/5 animate-pulse">
+                        <div className="flex items-center gap-3 sm:gap-4 flex-1">
+                          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white/10 flex-shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-white/10 rounded w-1/2" />
+                            <div className="h-3 bg-white/5 rounded w-1/3" />
+                          </div>
+                        </div>
+                        <div className="w-20 h-8 bg-white/10 rounded-xl" />
+                      </div>
+                    ))
+                  ) : (
+                    allUsers.map((u) => (
+                      <div key={u.uid} className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/5 group hover:border-rose-500/30 transition-all gap-3">
+                        <div 
+                          className="flex items-center gap-3 sm:gap-4 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => onViewUserProfile(u.uid)}
+                        >
+                          <div className="relative flex-shrink-0">
+                            <img 
+                              src={u.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.uid}`} 
+                              className={cn("w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/10", u.banned && "grayscale opacity-50")}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                            />
+                            {u.online && <div className="absolute bottom-0 right-0 w-2 sm:w-2.5 h-2 sm:h-2.5 bg-green-500 border-2 border-slate-900 rounded-full" />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <p className={cn("font-bold text-sm sm:text-base truncate", u.banned && "line-through opacity-50")}>{u.displayName}</p>
+                              {u.role === 'admin' && <span className="text-[7px] sm:text-[8px] font-black bg-rose-500 text-white px-1 sm:px-1.5 py-0.5 rounded uppercase tracking-tighter flex-shrink-0">Admin</span>}
+                              {u.banned && <span className="text-[7px] sm:text-[8px] font-black bg-black text-rose-500 px-1 sm:px-1.5 py-0.5 rounded uppercase tracking-tighter border border-rose-500/50 flex-shrink-0">Banned</span>}
+                            </div>
+                            <p className="text-[9px] sm:text-[10px] opacity-40 truncate">{u.email}</p>
+                          </div>
+                        </div>
+                        
+                        {u.uid !== user?.uid && u.role !== 'admin' && (
+                          <button 
+                            onClick={() => setUserToToggleBan(u)}
+                            className={cn(
+                              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex-shrink-0",
+                              u.banned 
+                                ? "bg-green-500/10 text-green-500 hover:bg-green-500/20" 
+                                : "bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                            )}
+                          >
+                            {u.banned ? (
+                              <><CheckCircle className="w-3 h-3" /> <span className="hidden min-[400px]:inline">Unban</span></>
+                            ) : (
+                              <><Ban className="w-3 h-3" /> <span className="hidden min-[400px]:inline">Ban User</span><span className="min-[400px]:hidden">Ban</span></>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
         )}
       </div>
@@ -1105,12 +1504,12 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                 animate={{ scale: 1, y: 0 }}
                 className="bg-slate-900 border border-white/10 rounded-[40px] p-12 max-w-md w-full shadow-2xl"
               >
-                <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-2 text-center">Create Room</h2>
-                <p className="text-sm opacity-60 mb-8 text-center">Start a new game session.</p>
+                <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-2 text-center">Criar Sala</h2>
+                <p className="text-sm opacity-60 mb-8 text-center">Inicie uma nova sessão de jogo.</p>
                 
                 <div className="space-y-6">
                   <div>
-                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-2 block">Room Name</label>
+                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-2 block">Nome da Sala</label>
                     <input 
                       type="text"
                       value={newRoomName}
@@ -1122,52 +1521,25 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
 
                   <div>
                     <label className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-2 block">Select Game</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        onClick={() => setNewRoomGameType('Tic-Tac-Toe')}
-                        className={cn(
-                          "py-3 rounded-2xl font-bold text-sm border transition-all flex items-center justify-center gap-2",
-                          newRoomGameType === 'Tic-Tac-Toe' ? "bg-blue-600 border-blue-500" : "bg-white/5 border-white/10 opacity-40"
-                        )}
-                      >
-                        <Grid3X3 className="w-4 h-4" />
-                        Tic-Tac-Toe
-                      </button>
-                      <button 
-                        onClick={() => setNewRoomGameType('Checkers')}
-                        className={cn(
-                          "py-3 rounded-2xl font-bold text-sm border transition-all flex items-center justify-center gap-2",
-                          newRoomGameType === 'Checkers' ? "bg-rose-600 border-rose-500" : "bg-white/5 border-white/10 opacity-40"
-                        )}
-                      >
-                        <Disc className="w-4 h-4" />
-                         Checkers
-                      </button>
-                      <button 
-                        onClick={() => setNewRoomGameType('Ludo')}
-                        className={cn(
-                          "py-3 rounded-2xl font-bold text-sm border transition-all flex items-center justify-center gap-2",
-                          newRoomGameType === 'Ludo' ? "bg-yellow-600 border-yellow-500" : "bg-white/5 border-white/10 opacity-40"
-                        )}
-                      >
-                        <Trophy className="w-4 h-4" />
-                        Ludo
-                      </button>
-                      <button 
-                        onClick={() => setNewRoomGameType('Forca')}
-                        className={cn(
-                          "py-3 rounded-2xl font-bold text-sm border transition-all flex items-center justify-center gap-2",
-                          newRoomGameType === 'Forca' ? "bg-purple-600 border-purple-500" : "bg-white/5 border-white/10 opacity-40"
-                        )}
-                      >
-                        <Users className="w-3 h-3" />
-                        Forca
-                      </button>
+                    <div className="grid grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+                      {games.filter(g => !g.comingSoon).map((game) => (
+                        <button 
+                          key={game.id}
+                          onClick={() => setNewRoomGameType(game.title)}
+                          className={cn(
+                            "py-3 px-3 rounded-2xl font-bold text-[10px] sm:text-xs border transition-all flex items-center gap-2",
+                            newRoomGameType === game.title ? "bg-white/10 border-white/30 ring-1 ring-white/20 shadow-lg shadow-black/20" : "bg-white/5 border-white/10 opacity-50 hover:opacity-100 hover:bg-white/10"
+                          )}
+                        >
+                          <img src={game.image} className="w-5 h-5 object-contain" aria-hidden="true" referrerPolicy="no-referrer" />
+                          <span className="truncate">{game.title === 'Tic-Tac-Toe' ? 'Jogo da Velha' : game.title === 'Checkers' ? 'Damas' : game.title}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-2 block">Privacy</label>
+                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-40 mb-2 block">Privacidade</label>
                     <div className="grid grid-cols-2 gap-3">
                       <button 
                         onClick={() => setNewRoomType('open')}
@@ -1176,7 +1548,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                           newRoomType === 'open' ? "bg-blue-600 border-blue-500" : "bg-white/5 border-white/10 opacity-40"
                         )}
                       >
-                        Open
+                        Pública
                       </button>
                       <button 
                         onClick={() => setNewRoomType('private')}
@@ -1185,11 +1557,11 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                           newRoomType === 'private' ? "bg-blue-600 border-blue-500" : "bg-white/5 border-white/10 opacity-40"
                         )}
                       >
-                        Private
+                        Privada
                       </button>
                     </div>
                     <p className="text-[10px] opacity-30 mt-2 italic">
-                      {newRoomType === 'open' ? 'Listed in the public lobby.' : 'Only accessible via direct invite.'}
+                      {newRoomType === 'open' ? 'Listada no lobby público.' : 'Acessível apenas via convite direto.'}
                     </p>
                   </div>
 
@@ -1199,13 +1571,13 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                       disabled={!newRoomName.trim()}
                       className="w-full py-4 bg-blue-600 rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Create Session
+                      Criar Sessão
                     </button>
                     <button 
                       onClick={() => setShowCreateRoom(false)}
                       className="text-xs uppercase tracking-widest opacity-30 hover:opacity-100 transition-opacity"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                   </div>
                 </div>
@@ -1238,7 +1610,8 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                     { id: 'Tic-Tac-Toe', icon: Grid3X3, color: 'text-blue-400', bg: 'bg-blue-500/10' },
                     { id: 'Checkers', icon: Disc, color: 'text-rose-400', bg: 'bg-rose-500/10' },
                     { id: 'Ludo', icon: Trophy, color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-                    { id: 'Forca', icon: Users, color: 'text-purple-400', bg: 'bg-purple-500/10' }
+                    { id: 'Forca Batalha', icon: Users, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                    { id: 'Forca Clássico', icon: Users, color: 'text-amber-400', bg: 'bg-amber-500/10' }
                   ].map((game) => (
                     <button
                       key={game.id}
@@ -1250,7 +1623,13 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                     >
                       <div className="flex items-center gap-3">
                         <game.icon className={cn("w-6 h-6", game.color)} />
-                        <span>{game.id}</span>
+                        <span>
+                          {game.id === 'Tic-Tac-Toe' ? 'Jogo da Velha' : 
+                          game.id === 'Checkers' ? 'Damas' : 
+                          game.id === 'Forca Batalha' ? 'Forca Batalha' : 
+                          game.id === 'Forca Clássico' ? 'Forca Clássico' : 
+                          game.id}
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -1634,7 +2013,11 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                   <HelpCircle className="w-6 h-6 text-yellow-500" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black italic uppercase tracking-tighter">{showRulesFor} Rules</h3>
+                  <h3 className="text-2xl font-black italic uppercase tracking-tighter">
+                    {showRulesFor === 'Tic-Tac-Toe' ? 'Jogo da Velha' : 
+                     showRulesFor === 'Checkers' ? 'Damas' : 
+                     showRulesFor} Rules
+                  </h3>
                   <p className="text-[10px] font-bold tracking-widest uppercase opacity-40">Learn how to play</p>
                 </div>
               </div>
@@ -1718,7 +2101,7 @@ export const Dashboard = ({ activeRoom, setActiveRoom, pendingRequests, sentRequ
                       </div>
                     </div>
                   </>
-                ) : showRulesFor === 'Forca' ? (
+                ) : showRulesFor === 'Forca Batalha' ? (
                   <>
                     <div className="flex gap-4">
                       <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 font-mono font-bold text-blue-400">1</div>

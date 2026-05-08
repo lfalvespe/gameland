@@ -7,6 +7,7 @@
       "properties": {
         "uid": { "type": "string" },
         "displayName": { "type": "string" },
+        "displayName_normalized": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "photoURL": { "type": "string" },
         "bannerURL": { "type": "string" },
@@ -126,6 +127,7 @@
         "guesses": { "type": "array", "items": { "type": "string" } },
         "wrongGuesses": { "type": "number" },
         "scores": { "type": "object" },
+        "targetMappings": { "type": "object", "description": "Mapping from guesser ID to target word owner ID" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
